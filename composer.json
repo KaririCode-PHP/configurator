@@ -43,19 +43,11 @@
     "kariricode/data-structure": "^1.0",
     "symfony/yaml": "^6.3"
   },
-  "require-dev": {
-    "friendsofphp/php-cs-fixer": "^3.58",
-    "nunomaduro/phpinsights": "^2.11",
-    "phpunit/phpunit": "^10.5",
-    "squizlabs/php_codesniffer": "^3.10",
-    "mockery/mockery": "^1.6",
-    "enlightn/security-checker": "^2.0"
-  },
   "scripts": {
-    "test": "phpunit",
-    "check-style": "phpcs src tests",
-    "fix-style": "phpcbf src tests",
-    "analyse": "phpstan analyse src tests --level=max"
+    "test": "kcode test",
+    "check-style": "kcode cs:fix --check",
+    "fix-style": "kcode cs:fix",
+    "analyse": "kcode analyse"
   },
   "extra": {
     "branch-alias": {
