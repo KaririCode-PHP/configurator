@@ -18,38 +18,44 @@ use KaririCode\Contract\Configuration\ValueProcessor;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
- * Fluent builder for Configuration instances.
+ * Builds a sealed Configuration from the sources an application
+ * declares, applied in a fixed priority: provider defaults, then
+ * directory files (base, then the environment overlay), then explicit
+ * files, then programmatic overrides.
  *
- * Separates construction complexity from the Configuration class.
- * Supports directory scanning, glob patterns, environment-aware
- * loading, config providers for ecosystem self-configuration,
- * value processor chains (env interpolation, type casting, encryption),
- * and optional schema validation.
+ * It also wires the value processors (environment interpolation, casts,
+ * decryption), custom loaders, the merge strategy and the schema, so the
+ * Configuration class stays free of construction concerns. Environment
+ * resolvers, value processors and config providers are the types of
+ * kariricode/contract, so any component can supply them without
+ * depending on this package.
  *
- * Ecosystem integration: environment resolvers, value processors and
- * config providers are the types of kariricode/contract, so any
- * component can supply them without depending on this package.
+ * Preconditions: create() starts a builder; every with*() call returns
+ * the same builder; build() may run more than once and builds a new
+ * Configuration each time, which ReloadableConfiguration relies on.
  *
- * Usage:
- *   $config = ConfigurationBuilder::create()
- *       ->withDirectory(__DIR__ . '/config')
- *       ->withEnvironment('production')
- *       ->withEnvInterpolation()
- *       ->withProvider(new CacheConfigProvider())
- *       ->withSchema(['app.name' => 'string', 'app.debug' => 'bool'])
- *       ->build();
+ * Thread-safety: a builder is mutable and belongs to the code that
+ * configures it; the configurations it builds are independent of it.
  *
- * With a .env store (kariricode/dotenv 4.5 or later):
- *   $dotenv = new \KaririCode\Dotenv\Dotenv('/app');
- *   $dotenv->load();
+ * Side effects: build() lists and reads the configured files and
+ * directories, and the processors may read the environment.
  *
- *   $config = ConfigurationBuilder::create()
- *       ->withDotenv(new \KaririCode\Dotenv\Integration\DotenvEnvironmentResolver($dotenv))
- *       ->withDirectory('/app/config')
- *       ->build();
+ * Example:
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ *     $config = ConfigurationBuilder::create()
+ *         ->withDirectory(__DIR__ . '/config')
+ *         ->withEnvironment('production')
+ *         ->withEnvInterpolation()
+ *         ->withSchema(['app.name' => 'string', 'app.debug' => 'bool'])
+ *         ->build();
+ *
+ * With a .env store, kariricode/dotenv 4.5 or later: `->withDotenv(new
+ * DotenvEnvironmentResolver($dotenv))` (ADR-010).
+ *
+ * References: ADR-001, ADR-004, ADR-005, ADR-010; SPEC-CONFIGURATOR §5,
+ * §7. ARFA 1.3 P2: composition of sources and processors.
+ *
+ * @since 4.2.0
  */
 final class ConfigurationBuilder
 {
@@ -94,7 +100,7 @@ final class ConfigurationBuilder
         return new self();
     }
 
-    // ── Configuration ─────────────────────────────────────────────────
+    // ── Configuration ────────────────────────────────────────────────────
 
     public function withMergeStrategy(MergeStrategy $strategy): self
     {
@@ -127,7 +133,7 @@ final class ConfigurationBuilder
         return $this;
     }
 
-    // ── Config Providers ──────────────────────────────────────────────
+    // ── Config Providers ─────────────────────────────────────────────────
 
     /**
      * Registers an ecosystem config provider.
@@ -153,7 +159,7 @@ final class ConfigurationBuilder
         return $this;
     }
 
-    // ── Value Processors ──────────────────────────────────────────────
+    // ── Value Processors ─────────────────────────────────────────────────
 
     /**
      * Adds a value processor to the processing chain.
@@ -219,7 +225,7 @@ final class ConfigurationBuilder
         );
     }
 
-    // ── Sources ───────────────────────────────────────────────────────
+    // ── Sources ──────────────────────────────────────────────────────────
 
     public function withFile(string $path): self
     {
@@ -279,16 +285,16 @@ final class ConfigurationBuilder
         return $this;
     }
 
-    // ── Build ─────────────────────────────────────────────────────────
+    // ── Build ────────────────────────────────────────────────────────────
 
     public function build(): Configuration
     {
         $validator = $this->buildValidator();
 
         $config = new Configuration(
-            $this->mergeStrategy,
-            $validator,
-            $this->processorChain->isEmpty() ? null : $this->processorChain,
+            mergeStrategy: $this->mergeStrategy,
+            validator: $validator,
+            processorChain: $this->processorChain->isEmpty() ? null : $this->processorChain,
         );
 
         foreach ($this->customLoaders as [$loader, $extensions]) {
@@ -316,7 +322,7 @@ final class ConfigurationBuilder
         return $config;
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     private function buildValidator(): ?ConfigValidator
     {

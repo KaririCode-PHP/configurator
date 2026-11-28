@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 final class EnvironmentResolverTest extends TestCase
 {
-    // ── InMemoryEnvironmentResolver ───────────────────────────────────
+    // ── InMemoryEnvironmentResolver ──────────────────────────────────────
 
     public function testInMemoryGetReturnsSetValue(): void
     {
@@ -69,7 +69,7 @@ final class EnvironmentResolverTest extends TestCase
         self::assertSame($vars, $resolver->all());
     }
 
-    // ── SystemEnvironmentResolver ─────────────────────────────────────
+    // ── SystemEnvironmentResolver ────────────────────────────────────────
 
     public function testSystemResolverReadsFromEnvSuperglobal(): void
     {
@@ -117,7 +117,7 @@ final class EnvironmentResolverTest extends TestCase
         }
     }
 
-    // ── CompositeEnvironmentResolver ──────────────────────────────────
+    // ── CompositeEnvironmentResolver ─────────────────────────────────────
 
     public function testCompositeResolvesFromFirstResolver(): void
     {

@@ -36,7 +36,7 @@ final class YamlEdgeCasesTest extends TestCase
         rmdir($this->fixtureDir);
     }
 
-    // ── Unsupported Feature Detection ─────────────────────────────────
+    // ── Unsupported Feature Detection ────────────────────────────────────
 
     public function testDetectsAnchor(): void
     {
@@ -102,7 +102,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->loader->load($this->fixtureDir . '/tabs.yaml');
     }
 
-    // ── Valid Edge Cases ──────────────────────────────────────────────
+    // ── Valid Edge Cases ─────────────────────────────────────────────────
 
     public function testEmptyFileReturnsEmptyArray(): void
     {
@@ -370,9 +370,9 @@ final class YamlEdgeCasesTest extends TestCase
         self::assertSame('${DB_PORT:5432}', self::at($result, 'database', 'port'));
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
-    // ── Structure Regressions (V4.2 deep review) ──────────────────────
+    // ── Structure Regressions (V4.2 deep review) ─────────────────────────
 
     public function testSequenceOfMappingsWithInlineFirstKey(): void
     {
@@ -412,7 +412,7 @@ final class YamlEdgeCasesTest extends TestCase
         self::assertSame(['a' => ['b' => 1]], $this->parseYaml("a:\n  # note: not a key\n  b: 1\n"));
     }
 
-    // ── Block Scalar Regressions ──────────────────────────────────────
+    // ── Block Scalar Regressions ─────────────────────────────────────────
 
     public function testLiteralBlockKeepsBlankLinesAndHashContent(): void
     {
@@ -445,7 +445,7 @@ final class YamlEdgeCasesTest extends TestCase
         self::assertSame("p1 l1 p1 l2\np2\n", $this->parseYaml("a: >\n  p1 l1\n  p1 l2\n\n  p2\n")['a']);
     }
 
-    // ── Scalar and Flow Regressions ───────────────────────────────────
+    // ── Scalar and Flow Regressions ──────────────────────────────────────
 
     public function testEscapedBackslashBeforeClosingQuote(): void
     {
@@ -477,7 +477,7 @@ final class YamlEdgeCasesTest extends TestCase
         self::assertSame('this is a long description text', $result['desc']);
     }
 
-    // ── Failing Loudly ────────────────────────────────────────────────
+    // ── Failing Loudly ───────────────────────────────────────────────────
 
     public function testOrphanIndentationIsRejected(): void
     {

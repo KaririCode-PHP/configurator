@@ -8,29 +8,31 @@ use KaririCode\Configurator\Contract\ConfigValidator;
 use KaririCode\Configurator\Exception\ValidationException;
 
 /**
- * Validates configuration against a schema that declares
- * expected types and required keys.
+ * Checks a configuration tree against a schema of dot-notation paths and
+ * types (`string`, `int`, `float`, `bool`, `array`, `numeric`, `scalar`
+ * or a class name), and reports every violation at once.
  *
- * Schema format (dot-notation keys → type descriptors):
- *   [
- *       'app.name'      => 'string',
- *       'app.debug'     => 'bool',
- *       'app.port'      => 'int',
- *       'app.rate'      => 'float',
- *       'app.servers'   => 'array',
- *       'app.callback'  => '?string',   // nullable string
- *       'database.host' => 'string',
- *   ]
+ * A leading `?` makes a key optional; without it the key must exist, and
+ * a key that exists with a null value passes (SPEC-CONFIGURATOR §4).
  *
- * A leading '?' marks the key as optional. Keys without '?'
- * are required and must exist in the data.
+ * Preconditions: the schema maps paths to type descriptors.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: immutable; safe to share between fibers and requests.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     new SchemaValidator(['app.name' => 'string', 'app.rate' => '?float'])->validate($data);
+ *
+ * References: SPEC-CONFIGURATOR §4, ADR-011. ARFA 1.3 P5: every
+ * violation in one pass.
+ *
+ * @since 4.2.0
  */
 final readonly class SchemaValidator implements ConfigValidator
 {
-    // ── Type Map ──────────────────────────────────────────────────────
+    // ── Type Map ─────────────────────────────────────────────────────────
 
     /**
      * @param array<string, string> $schema Dot-notation path → type descriptor
@@ -82,7 +84,7 @@ final readonly class SchemaValidator implements ConfigValidator
         }
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * @param array<array-key, mixed> $data

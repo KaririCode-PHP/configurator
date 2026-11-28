@@ -7,17 +7,32 @@ namespace KaririCode\Configurator\Contract;
 use KaririCode\Configurator\Exception\AccessException;
 
 /**
- * Central configuration access contract.
+ * Reads configuration by dot-notation path with typed accessors, so code
+ * depends on what it reads rather than on how the configuration was
+ * built: `database.connections.default.host` resolves
+ * `$data['database']['connections']['default']['host']`.
  *
- * Provides unified, type-safe access to hierarchical configuration
- * data with dot-notation path resolution. Implementations must
- * guarantee immutability after the loading phase completes.
+ * Preconditions: get() and has() never throw; a stored null reads as
+ * missing. The typed accessors coerce where it is safe (numeric strings,
+ * the boolean words) and otherwise raise AccessException (CFG_2800). An
+ * implementation does not change after its loading phase.
  *
- * Dot-notation resolves nested keys:
- *   'database.connections.default.host' → $data['database']['connections']['default']['host']
+ * Thread-safety: implementations are safe to share once loaded.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Side effects: none in Configuration and EventDispatcherBridge;
+ * ReloadableConfiguration may rebuild itself on a read.
+ *
+ * Example:
+ *
+ *     function connect(Configurator $config): \PDO
+ *     {
+ *         return new \PDO($config->getString('database.dsn'));
+ *     }
+ *
+ * References: SPEC-CONFIGURATOR §8, ADR-003. ARFA 1.3 P1: read-only
+ * access to an immutable value.
+ *
+ * @since 4.2.0
  */
 interface Configurator
 {

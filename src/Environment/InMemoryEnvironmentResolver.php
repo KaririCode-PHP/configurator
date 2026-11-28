@@ -7,13 +7,27 @@ namespace KaririCode\Configurator\Environment;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
- * In-memory environment resolver for testing.
+ * Resolves environment variables from a map the caller owns, so tests
+ * and tools interpolate `${VAR}` without touching the process
+ * environment.
  *
- * Provides a controlled, deterministic environment for unit tests
- * and integration tests without touching system globals.
+ * Preconditions: names and values are strings; set() and remove() change
+ * the map in place.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Thread-safety: mutable; share it only when nothing calls set() or
+ * remove() any more.
+ *
+ * Side effects: none outside the instance.
+ *
+ * Example:
+ *
+ *     $resolver = new InMemoryEnvironmentResolver(['DB_HOST' => 'localhost']);
+ *     $config = ConfigurationBuilder::create()->withEnvInterpolation($resolver)->build();
+ *
+ * References: ADR-004; kariricode/contract
+ * `Environment\EnvironmentResolver`.
+ *
+ * @since 4.2.0
  */
 final class InMemoryEnvironmentResolver implements EnvironmentResolver
 {

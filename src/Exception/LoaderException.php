@@ -46,7 +46,7 @@ final class LoaderException extends ConfigurationBase implements ConfigurationEx
 
     private function __construct(ConfigCode $code, string $message, string $reason = '', ?\Throwable $previous = null)
     {
-        parent::__construct($code, $message, $previous);
+        parent::__construct(errorCode: $code, message: $message, previous: $previous);
         $this->reason = $reason;
     }
 

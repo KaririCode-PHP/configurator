@@ -17,7 +17,7 @@ final class TypeCastProcessorTest extends TestCase
         $this->processor = new TypeCastProcessor();
     }
 
-    // ── supports() ────────────────────────────────────────────────────
+    // ── supports() ───────────────────────────────────────────────────────
 
     public function testSupportsKnownPrefixes(): void
     {
@@ -45,7 +45,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertFalse($this->processor->supports(null));
     }
 
-    // ── int ───────────────────────────────────────────────────────────
+    // ── int ──────────────────────────────────────────────────────────────
 
     public function testCastsToInt(): void
     {
@@ -54,7 +54,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame(-1, $this->processor->process('int:-1'));
     }
 
-    // ── float ─────────────────────────────────────────────────────────
+    // ── float ────────────────────────────────────────────────────────────
 
     public function testCastsToFloat(): void
     {
@@ -62,7 +62,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame(0.0, $this->processor->process('float:0'));
     }
 
-    // ── bool ──────────────────────────────────────────────────────────
+    // ── bool ─────────────────────────────────────────────────────────────
 
     public function testCastsToBoolTrue(): void
     {
@@ -86,7 +86,7 @@ final class TypeCastProcessorTest extends TestCase
         $this->processor->process('bool:maybe');
     }
 
-    // ── json ──────────────────────────────────────────────────────────
+    // ── json ─────────────────────────────────────────────────────────────
 
     public function testCastsJsonToArray(): void
     {
@@ -99,7 +99,7 @@ final class TypeCastProcessorTest extends TestCase
         $this->processor->process('json:{invalid}');
     }
 
-    // ── csv ───────────────────────────────────────────────────────────
+    // ── csv ──────────────────────────────────────────────────────────────
 
     public function testCastsCsvToArray(): void
     {
@@ -116,7 +116,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame([], $this->processor->process('csv:'));
     }
 
-    // ── base64 ────────────────────────────────────────────────────────
+    // ── base64 ───────────────────────────────────────────────────────────
 
     public function testDecodesBase64(): void
     {
@@ -129,7 +129,7 @@ final class TypeCastProcessorTest extends TestCase
         $this->processor->process('base64:!!!invalid!!!');
     }
 
-    // ── String transforms ─────────────────────────────────────────────
+    // ── String transforms ────────────────────────────────────────────────
 
     public function testTrimsValue(): void
     {
@@ -146,7 +146,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame('HELLO WORLD', $this->processor->process('upper:hello world'));
     }
 
-    // ── Custom caster ─────────────────────────────────────────────────
+    // ── Custom caster ────────────────────────────────────────────────────
 
     public function testCustomCasterRegistration(): void
     {
@@ -159,7 +159,7 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame(255, $this->processor->process('hex:ff'));
     }
 
-    // ── Pass-through ──────────────────────────────────────────────────
+    // ── Pass-through ─────────────────────────────────────────────────────
 
     public function testNonStringPassesThrough(): void
     {

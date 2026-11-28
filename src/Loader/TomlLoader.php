@@ -9,31 +9,34 @@ use KaririCode\Configurator\Exception\ConfigCode;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loads configuration from TOML files using a built-in parser.
- *
- * Implements the subset of TOML 1.0 that configuration files need, with
- * the strictness of the specification: bare, quoted and dotted keys;
- * tables ([a.b]); basic ("...") and literal ('...') strings with the
- * TOML 1.0 escape set; integers (decimal without leading zeros, 0x, 0o,
+ * Loads TOML files with a built-in parser for the subset of TOML 1.0
+ * that configuration needs, with the strictness of the specification:
+ * bare, quoted and dotted keys; tables; basic and literal strings with
+ * the TOML escape set; integers (decimal without leading zeros, 0x, 0o,
  * 0b, underscores only between digits) checked for 64-bit overflow;
- * floats including inf/nan; booleans; arrays (nested, multi-line,
+ * floats with inf and nan; booleans; arrays (nested, multi-line,
  * trailing comma); and single-line inline tables.
  *
- * Invalid documents are rejected with LoaderException (code CFG_2820) and
- * the offending line: unquoted strings, malformed numbers, duplicate
- * keys or tables, and keys that would extend a value are errors, never
- * silent reinterpretations.
+ * Invalid documents fail with LoaderException CFG_2820 and the line:
+ * unquoted strings, malformed numbers, duplicate keys or tables and keys
+ * that would extend a value are errors, never reinterpretations. Arrays
+ * of tables, multi-line strings and date-time values fail with CFG_2823
+ * (ADR-008).
  *
- * Unsupported features fail with LoaderException (code CFG_2823)
- * (ADR-008, mirroring the YAML parser in ADR-002):
- *   - Arrays of tables ([[table]])
- *   - Multi-line strings (""" and ''')
- *   - Date/time types (offset datetime, local datetime, date, time)
+ * Preconditions: the file is UTF-8 text.
  *
- * Zero external dependencies — no third-party TOML library.
+ * Thread-safety: stateless; one instance serves every caller.
  *
- * @package KaririCode\Configurator
- * @since   4.2.0 ARFA 1.3
+ * Side effects: load() reads the file.
+ *
+ * Example:
+ *
+ *     $data = new TomlLoader()->load('/app/config/app.toml');
+ *
+ * References: TOML 1.0, ADR-008, ADR-011. ARFA 1.3 P4: one format per
+ * loader, no dependency.
+ *
+ * @since 4.2.0
  */
 final readonly class TomlLoader implements Loader
 {
@@ -81,7 +84,7 @@ final readonly class TomlLoader implements Loader
         return $extension === 'toml';
     }
 
-    // ── Document ──────────────────────────────────────────────────────
+    // ── Document ─────────────────────────────────────────────────────────
 
     /**
      * @return array<array-key, mixed>
@@ -95,7 +98,7 @@ final readonly class TomlLoader implements Loader
             $toml = substr($toml, 3);
         }
 
-        $lines = explode("\n", str_replace("\r\n", "\n", $toml));
+        $lines = explode("\n", str_replace(search: "\r\n", replace: "\n", subject: $toml));
         $document = new TomlDocument();
         $table = [];
 
@@ -123,9 +126,9 @@ final readonly class TomlLoader implements Loader
                     throw LoaderException::invalidSyntax("expected 'key = value'");
                 }
 
-                $key = $this->parseKey(substr($line, 0, $equals));
-                [$valueText, $index] = $this->collectValue(trim(substr($line, $equals + 1)), $lines, $index);
-                $document->assign($table, $key, $this->parseValue($valueText, $lineNumber));
+                $key = $this->parseKey(substr(string: $line, offset: 0, length: $equals));
+                [$valueText, $index] = $this->collectValue(value: trim(substr($line, $equals + 1)), lines: $lines, index: $index);
+                $document->assign(table: $table, key: $key, value: $this->parseValue($valueText, $lineNumber));
             } catch (LoaderException $exception) {
                 throw $exception->errorCode === ConfigCode::ParseError
                     ? LoaderException::invalidSyntax(sprintf('%s on line %d', $exception->reason, $lineNumber))
@@ -184,7 +187,7 @@ final readonly class TomlLoader implements Loader
         return [$value, $index];
     }
 
-    // ── Keys ──────────────────────────────────────────────────────────
+    // ── Keys ─────────────────────────────────────────────────────────────
 
     /**
      * @return non-empty-list<string>
@@ -197,7 +200,7 @@ final readonly class TomlLoader implements Loader
             throw LoaderException::invalidSyntax(sprintf("malformed table header '%s'", $line));
         }
 
-        return $this->parseKey(substr($line, 1, -1));
+        return $this->parseKey(substr(string: $line, offset: 1, length: -1));
     }
 
     /**
@@ -226,9 +229,9 @@ final readonly class TomlLoader implements Loader
                     throw LoaderException::invalidSyntax(sprintf("unterminated quoted key '%s'", trim($key)));
                 }
 
-                $segments[] = $this->decodeString(substr($key, $position, $close - $position + 1));
+                $segments[] = $this->decodeString(substr(string: $key, offset: $position, length: $close - $position + 1));
                 $position = $close + 1;
-            } elseif (preg_match('/[A-Za-z0-9_-]+/A', $key, $match, 0, $position) === 1) {
+            } elseif (preg_match(pattern: '/[A-Za-z0-9_-]+/A', subject: $key, matches: $match, flags: 0, offset: $position) === 1) {
                 $segments[] = $match[0];
                 $position += strlen($match[0]);
             } else {
@@ -249,7 +252,7 @@ final readonly class TomlLoader implements Loader
         }
     }
 
-    // ── Values ────────────────────────────────────────────────────────
+    // ── Values ───────────────────────────────────────────────────────────
 
     /**
      * @return string|int|float|bool|array<array-key, mixed>
@@ -303,31 +306,31 @@ final readonly class TomlLoader implements Loader
      */
     private function parseNumber(string $value): int|float
     {
-        if (preg_match('/^[+-]?(?:0|[1-9](?:_?\d)*)$/', $value) === 1) {
+        if (preg_match('/^[+-]?(?:0|[1-9](?:_?\d)*)\z/', $value) === 1) {
             // The pattern guarantees an integer literal; FILTER_VALIDATE_INT
             // refuses one beyond 64 bits, which toInteger() then rejects.
-            $integer = filter_var(str_replace('_', '', $value), FILTER_VALIDATE_INT);
+            $integer = filter_var(str_replace(search: '_', replace: '', subject: $value), FILTER_VALIDATE_INT);
 
             return $this->toInteger($integer === false ? INF : $integer, $value);
         }
 
-        if (preg_match('/^0x([0-9A-Fa-f](?:_?[0-9A-Fa-f])*)$/', $value, $match) === 1) {
-            return $this->toInteger(hexdec(str_replace('_', '', $match[1])), $value);
+        if (preg_match(pattern: '/^0x([0-9A-Fa-f](?:_?[0-9A-Fa-f])*)\z/', subject: $value, matches: $match) === 1) {
+            return $this->toInteger(hexdec(str_replace(search: '_', replace: '', subject: $match[1])), $value);
         }
 
-        if (preg_match('/^0o([0-7](?:_?[0-7])*)$/', $value, $match) === 1) {
-            return $this->toInteger(octdec(str_replace('_', '', $match[1])), $value);
+        if (preg_match(pattern: '/^0o([0-7](?:_?[0-7])*)\z/', subject: $value, matches: $match) === 1) {
+            return $this->toInteger(octdec(str_replace(search: '_', replace: '', subject: $match[1])), $value);
         }
 
-        if (preg_match('/^0b([01](?:_?[01])*)$/', $value, $match) === 1) {
-            return $this->toInteger(bindec(str_replace('_', '', $match[1])), $value);
+        if (preg_match(pattern: '/^0b([01](?:_?[01])*)\z/', subject: $value, matches: $match) === 1) {
+            return $this->toInteger(bindec(str_replace(search: '_', replace: '', subject: $match[1])), $value);
         }
 
         if (
-            preg_match('/^[+-]?(?:0|[1-9](?:_?\d)*)(?:\.\d(?:_?\d)*)?(?:[eE][+-]?\d(?:_?\d)*)?$/', $value) === 1
+            preg_match('/^[+-]?(?:0|[1-9](?:_?\d)*)(?:\.\d(?:_?\d)*)?(?:[eE][+-]?\d(?:_?\d)*)?\z/', $value) === 1
             && strpbrk($value, '.eE') !== false
         ) {
-            return (float) str_replace('_', '', $value);
+            return (float) str_replace(search: '_', replace: '', subject: $value);
         }
 
         throw LoaderException::invalidSyntax('invalid value (strings must be quoted)');
@@ -352,7 +355,7 @@ final readonly class TomlLoader implements Loader
      */
     private function decodeString(string $token): string
     {
-        $body = substr($token, 1, -1);
+        $body = substr(string: $token, offset: 1, length: -1);
 
         if (preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $body) === 1) {
             throw LoaderException::invalidSyntax('control characters must be escaped in strings');
@@ -386,9 +389,9 @@ final readonly class TomlLoader implements Loader
                 default => throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s'", $escape)),
             };
 
-            $hex = substr($body, $i + 1, $width);
+            $hex = substr(string: $body, offset: $i + 1, length: $width);
 
-            if (preg_match('/^[0-9A-Fa-f]{' . $width . '}$/', $hex) !== 1) {
+            if (preg_match('/^[0-9A-Fa-f]{' . $width . '}\z/', $hex) !== 1) {
                 throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s': expected %d hexadecimal digits", $escape, $width));
             }
 
@@ -410,7 +413,7 @@ final readonly class TomlLoader implements Loader
 
         return array_map(
             fn(string $item): string|int|float|bool|array => $this->parseValue($item, $lineNumber),
-            $this->splitItems(substr($value, 1, -1), trailingComma: true),
+            $this->splitItems(substr(string: $value, offset: 1, length: -1), trailingComma: true),
         );
     }
 
@@ -429,15 +432,15 @@ final readonly class TomlLoader implements Loader
 
         $table = new TomlDocument();
 
-        foreach ($this->splitItems(substr($value, 1, -1), trailingComma: false) as $entry) {
+        foreach ($this->splitItems(substr(string: $value, offset: 1, length: -1), trailingComma: false) as $entry) {
             $equals = strpos($this->maskStrings($entry), '=');
 
             if ($equals === false) {
                 throw LoaderException::invalidSyntax("expected 'key = value' in an inline table");
             }
 
-            $key = $this->parseKey(substr($entry, 0, $equals));
-            $table->assign([], $key, $this->parseValue(trim(substr($entry, $equals + 1)), $lineNumber));
+            $key = $this->parseKey(substr(string: $entry, offset: 0, length: $equals));
+            $table->assign(table: [], key: $key, value: $this->parseValue(trim(substr($entry, $equals + 1)), $lineNumber));
         }
 
         return $table->root;
@@ -473,7 +476,7 @@ final readonly class TomlLoader implements Loader
             };
 
             if ($char === ',' && $depth === 0) {
-                $pieces[] = trim(substr($inner, $start, $i - $start));
+                $pieces[] = trim(substr(string: $inner, offset: $start, length: $i - $start));
                 $start = $i + 1;
             }
         }
@@ -484,7 +487,7 @@ final readonly class TomlLoader implements Loader
             array_pop($pieces);
         }
 
-        if (in_array('', $pieces, true)) {
+        if (in_array(needle: '', haystack: $pieces, strict: true)) {
             throw LoaderException::invalidSyntax("unexpected ',' (empty item)");
         }
 
@@ -517,7 +520,7 @@ final readonly class TomlLoader implements Loader
         }
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
     /**
      * Replaces every string (quotes included) with MASK bytes, preserving
@@ -536,7 +539,7 @@ final readonly class TomlLoader implements Loader
 
             $close = $this->closingQuote($text, $i);
             $last = $close === -1 ? $length - 1 : $close;
-            $masked = substr_replace($masked, str_repeat(self::MASK, $last - $i + 1), $i, $last - $i + 1);
+            $masked = substr_replace(string: $masked, replace: str_repeat(self::MASK, $last - $i + 1), offset: $i, length: $last - $i + 1);
             $i = $last;
         }
 
@@ -570,7 +573,7 @@ final readonly class TomlLoader implements Loader
     {
         $hash = strpos($this->maskStrings($line), '#');
 
-        return $hash === false ? $line : substr($line, 0, $hash);
+        return $hash === false ? $line : substr(string: $line, offset: 0, length: $hash);
     }
 
     private function bracketDepth(string $text): int

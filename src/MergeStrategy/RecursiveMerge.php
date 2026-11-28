@@ -7,19 +7,28 @@ namespace KaririCode\Configurator\MergeStrategy;
 use KaririCode\Configurator\Contract\MergeStrategy;
 
 /**
- * Deep-merges two configuration arrays recursively.
+ * Merges a configuration source into the loaded tree key by key,
+ * descending into maps present in both; the source wins every other
+ * conflict, and lists are replaced whole, so an environment overlay
+ * never duplicates entries.
  *
- * When both base and source contain arrays at the same key,
- * the merge descends into the nested arrays. Scalar values
- * in the source always overwrite the base. Sequential arrays
- * (integer-keyed) are replaced entirely rather than appended
- * to prevent duplication across environment overlays.
+ * It is the default strategy and suits a base file followed by
+ * environment overlays (ADR-001).
  *
- * This is the default strategy and suits the common pattern of
- * loading a base config then overlaying environment-specific values.
+ * Preconditions: none; any two arrays merge.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: stateless; one instance serves every caller.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $merged = new RecursiveMerge()->merge(['db' => ['host' => 'a', 'port' => 5432]], ['db' => ['host' => 'b']]);
+ *     // ['db' => ['host' => 'b', 'port' => 5432]]
+ *
+ * References: ADR-001. ARFA 1.3 P2: a pure combination of two trees.
+ *
+ * @since 4.2.0
  */
 final readonly class RecursiveMerge implements MergeStrategy
 {
@@ -43,7 +52,7 @@ final readonly class RecursiveMerge implements MergeStrategy
         }
 
         // Integer keys and non-map values replace; maps merged above win.
-        return array_replace($base, $source, $nested);
+        return array_replace(array_replace($base, $source), $nested);
     }
 
     /**

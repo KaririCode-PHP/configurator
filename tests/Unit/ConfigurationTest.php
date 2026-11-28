@@ -19,7 +19,7 @@ final class ConfigurationTest extends TestCase
         $this->fixturesPath = dirname(__DIR__) . '/Fixture/Config';
     }
 
-    // ── Loading ───────────────────────────────────────────────────────
+    // ── Loading ──────────────────────────────────────────────────────────
 
     public function testLoadPhpFile(): void
     {
@@ -60,7 +60,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame('smtp', $config->get('services.mailer.transport'));
     }
 
-    // ── Merge ─────────────────────────────────────────────────────────
+    // ── Merge ────────────────────────────────────────────────────────────
 
     public function testMergeOverridesExistingValues(): void
     {
@@ -98,7 +98,7 @@ final class ConfigurationTest extends TestCase
         self::assertNull($config->get('database.driver'));
     }
 
-    // ── Seal (Immutability) ───────────────────────────────────────────
+    // ── Seal (Immutability) ──────────────────────────────────────────────
 
     public function testSealPreventsLoad(): void
     {
@@ -121,7 +121,7 @@ final class ConfigurationTest extends TestCase
         $config->merge(['key' => 'value']);
     }
 
-    // ── Typed Accessors ───────────────────────────────────────────────
+    // ── Typed Accessors ──────────────────────────────────────────────────
 
     public function testGetStringCoercesScalars(): void
     {
@@ -224,7 +224,7 @@ final class ConfigurationTest extends TestCase
         $config->getArray('name');
     }
 
-    // ── Defaults ──────────────────────────────────────────────────────
+    // ── Defaults ─────────────────────────────────────────────────────────
 
     public function testGetReturnsDefaultWhenMissing(): void
     {
@@ -238,7 +238,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame([], $config->getArray('missing'));
     }
 
-    // ── Has ───────────────────────────────────────────────────────────
+    // ── Has ──────────────────────────────────────────────────────────────
 
     public function testHasReturnsTrueForExistingPath(): void
     {
@@ -258,7 +258,7 @@ final class ConfigurationTest extends TestCase
         self::assertFalse($config->has('app.deep.path'));
     }
 
-    // ── Property Hooks ────────────────────────────────────────────────
+    // ── Property Hooks ───────────────────────────────────────────────────
 
     public function testCountPropertyHook(): void
     {
@@ -286,7 +286,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame(['alpha', 'beta'], $config->keys);
     }
 
-    // ── All ───────────────────────────────────────────────────────────
+    // ── All ──────────────────────────────────────────────────────────────
 
     public function testAllReturnsCompleteData(): void
     {
@@ -296,7 +296,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame(['a' => 1, 'b' => ['c' => 2]], $config->all());
     }
 
-    // ── Fluent API ────────────────────────────────────────────────────
+    // ── Fluent API ───────────────────────────────────────────────────────
 
     public function testFluentLoadChaining(): void
     {
@@ -311,7 +311,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame('smtp', $config->get('services.mailer.transport'));
     }
 
-    // ── Unsupported Format ────────────────────────────────────────────
+    // ── Unsupported Format ───────────────────────────────────────────────
 
     public function testLoadThrowsForUnsupportedExtension(): void
     {

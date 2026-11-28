@@ -20,7 +20,7 @@ final class ConfigurationPipelineTest extends TestCase
         $this->fixturesPath = dirname(__DIR__) . '/Fixture/Config';
     }
 
-    // ── Multi-Format Loading ──────────────────────────────────────────
+    // ── Multi-Format Loading ─────────────────────────────────────────────
 
     public function testLoadsPhpJsonYamlAndMerges(): void
     {
@@ -45,7 +45,7 @@ final class ConfigurationPipelineTest extends TestCase
         self::assertSame(60, $config->getInt('security.rate_limit.requests_per_minute'));
     }
 
-    // ── Environment Cascade ───────────────────────────────────────────
+    // ── Environment Cascade ──────────────────────────────────────────────
 
     public function testEnvironmentCascadeOverrides(): void
     {
@@ -64,7 +64,7 @@ final class ConfigurationPipelineTest extends TestCase
         self::assertSame('redis', $config->getString('cache.driver'));
     }
 
-    // ── Schema Validation Pipeline ────────────────────────────────────
+    // ── Schema Validation Pipeline ───────────────────────────────────────
 
     public function testSchemaValidationAtSealTime(): void
     {
@@ -82,7 +82,7 @@ final class ConfigurationPipelineTest extends TestCase
         self::assertSame('TestApp', $config->getString('app.name'));
     }
 
-    // ── Immutability After Seal ───────────────────────────────────────
+    // ── Immutability After Seal ──────────────────────────────────────────
 
     public function testSealedConfigIsReadOnly(): void
     {
@@ -98,7 +98,7 @@ final class ConfigurationPipelineTest extends TestCase
         $config->merge(['new' => 'data']);
     }
 
-    // ── Custom Loader Registration ────────────────────────────────────
+    // ── Custom Loader Registration ───────────────────────────────────────
 
     public function testCustomLoaderForNewFormat(): void
     {
@@ -132,7 +132,7 @@ final class ConfigurationPipelineTest extends TestCase
         }
     }
 
-    // ── Programmatic Overrides ────────────────────────────────────────
+    // ── Programmatic Overrides ───────────────────────────────────────────
 
     public function testProgrammaticOverridesApplyLast(): void
     {
@@ -149,7 +149,7 @@ final class ConfigurationPipelineTest extends TestCase
         self::assertTrue($config->getBool('app.debug'));
     }
 
-    // ── Deep Nesting ──────────────────────────────────────────────────
+    // ── Deep Nesting ─────────────────────────────────────────────────────
 
     public function testDeepDotNotationAccess(): void
     {
@@ -171,7 +171,7 @@ final class ConfigurationPipelineTest extends TestCase
         self::assertFalse($config->has('level1.level2.level3.level4.missing'));
     }
 
-    // ── Property Hooks After Full Pipeline ────────────────────────────
+    // ── Property Hooks After Full Pipeline ───────────────────────────────
 
     public function testPropertyHooksAfterMultiFilePipeline(): void
     {

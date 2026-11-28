@@ -19,7 +19,7 @@ final class YamlLoaderTest extends TestCase
         $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/Config';
     }
 
-    // ── Basic Loading ─────────────────────────────────────────────────
+    // ── Basic Loading ────────────────────────────────────────────────────
 
     public function testLoadsValidYamlConfig(): void
     {
@@ -46,7 +46,7 @@ final class YamlLoaderTest extends TestCase
         self::assertFalse($this->loader->supports('php'));
     }
 
-    // ── Nested Structures ─────────────────────────────────────────────
+    // ── Nested Structures ────────────────────────────────────────────────
 
     public function testParsesNestedMappings(): void
     {
@@ -57,7 +57,7 @@ final class YamlLoaderTest extends TestCase
         self::assertTrue(self::at($data, 'logging', 'channels', 'stdout', 'enabled'));
     }
 
-    // ── Sequences ─────────────────────────────────────────────────────
+    // ── Sequences ────────────────────────────────────────────────────────
 
     public function testParsesBlockSequences(): void
     {
@@ -69,7 +69,7 @@ final class YamlLoaderTest extends TestCase
         );
     }
 
-    // ── Type Casting ──────────────────────────────────────────────────
+    // ── Type Casting ─────────────────────────────────────────────────────
 
     public function testCastsNullValues(): void
     {
@@ -122,7 +122,7 @@ final class YamlLoaderTest extends TestCase
         self::assertSame('not a bool: true', self::at($data, 'types', 'quoted'));
     }
 
-    // ── Block Scalars ─────────────────────────────────────────────────
+    // ── Block Scalars ────────────────────────────────────────────────────
 
     public function testParsesLiteralBlockScalar(): void
     {
@@ -146,7 +146,7 @@ final class YamlLoaderTest extends TestCase
         self::assertStringEndsWith("\n", $summary);
     }
 
-    // ── Flow Collections ──────────────────────────────────────────────
+    // ── Flow Collections ─────────────────────────────────────────────────
 
     public function testParsesFlowSequence(): void
     {
@@ -163,7 +163,7 @@ final class YamlLoaderTest extends TestCase
         self::assertSame(1, self::at($data, 'flow_map', 'version'));
     }
 
-    // ── Edge Cases ────────────────────────────────────────────────────
+    // ── Edge Cases ───────────────────────────────────────────────────────
 
     public function testEmptyFileReturnsEmptyArray(): void
     {

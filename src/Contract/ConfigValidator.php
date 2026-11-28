@@ -7,14 +7,28 @@ namespace KaririCode\Configurator\Contract;
 use KaririCode\Configurator\Exception\ValidationException;
 
 /**
- * Configuration data validation contract.
+ * Checks a configuration tree against the rules it must meet, before the
+ * tree is sealed; the built-in SchemaValidator reads the schema format
+ * of SPEC-CONFIGURATOR §4.
  *
- * Validates a configuration array against a schema that defines
- * required keys, allowed types, and value constraints. Schema
- * format is documented in SPEC-CONFIGURATOR §4.
+ * Preconditions: validate() receives the tree after the value processors
+ * ran, so interpolated and cast values are what is checked; it returns
+ * nothing on success and throws ValidationException otherwise.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: implementations are stateless or immutable.
+ *
+ * Side effects: none in SchemaValidator; an implementation must add
+ * none.
+ *
+ * Example:
+ *
+ *     $validator = new SchemaValidator(['app.name' => 'string', 'app.port' => 'int']);
+ *     $validator->validate(['app' => ['name' => 'demo', 'port' => 8080]]);
+ *
+ * References: SPEC-CONFIGURATOR §4, ADR-011. ARFA 1.3 P5: every
+ * violation reported in one pass.
+ *
+ * @since 4.2.0
  */
 interface ConfigValidator
 {

@@ -8,27 +8,30 @@ use KaririCode\Configurator\Exception\ProcessorException;
 use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
- * Applies explicit type coercion directives embedded in string values.
+ * Applies the type prefixes of configuration strings, after the Symfony
+ * env var processors: `int:`, `float:`, `bool:`, `json:`, `csv:`,
+ * `base64:`, `file:` (reads the file, trimmed), `trim:`, `lower:` and
+ * `upper:`; registerCaster() adds a prefix of its own.
  *
- * Syntax (inspired by Symfony env var processors):
- *   "int:8080"          → (int) 8080
- *   "float:3.14"        → (float) 3.14
- *   "bool:true"         → true
- *   "json:{\"a\":1}"    → ['a' => 1]
- *   "csv:a,b,c"         → ['a', 'b', 'c']
- *   "base64:dGVzdA=="   → 'test'
- *   "file:/path/to/key" → file_get_contents('/path/to/key')
+ * Preconditions: a prefix runs only on a string that starts with it; a
+ * payload that does not convert raises ProcessorException (CFG_2831)
+ * without repeating the payload.
  *
- * The processor pattern is extensible: custom prefixes can be
- * registered via registerCaster(). This enables domain-specific
- * transformations (e.g. 'dsn:', 'url:', 'enum:') without modifying
- * the core processor.
+ * Thread-safety: mutable through registerCaster(); register every caster
+ * before the processor is shared.
  *
- * Ref: Symfony EnvVarProcessor (symfony/dependency-injection §7.3);
- *      Spring Boot @Value type conversion.
+ * Side effects: `file:` reads the file it names; the other casters have
+ * none.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Example:
+ *
+ *     $processor = new TypeCastProcessor();
+ *     $port = $processor->process('int:8080'); // 8080
+ *
+ * References: ADR-005, ADR-011; Symfony DependencyInjection env var
+ * processors.
+ *
+ * @since 4.2.0
  */
 final class TypeCastProcessor implements ValueProcessor
 {
@@ -53,7 +56,7 @@ final class TypeCastProcessor implements ValueProcessor
             return false;
         }
 
-        $prefix = substr($value, 0, $colonPos);
+        $prefix = substr(string: $value, offset: 0, length: $colonPos);
 
         return isset($this->casters[$prefix]);
     }
@@ -71,7 +74,7 @@ final class TypeCastProcessor implements ValueProcessor
             return $value;
         }
 
-        $prefix = substr($value, 0, $colonPos);
+        $prefix = substr(string: $value, offset: 0, length: $colonPos);
         $payload = substr($value, $colonPos + 1);
 
         $caster = $this->casters[$prefix] ?? null;
@@ -95,7 +98,7 @@ final class TypeCastProcessor implements ValueProcessor
         return $this;
     }
 
-    // ── Built-in Casters ──────────────────────────────────────────────
+    // ── Built-in Casters ─────────────────────────────────────────────────
 
     /** @return array<string, \Closure(string): mixed> */
     private function defaultCasters(): array
@@ -113,7 +116,7 @@ final class TypeCastProcessor implements ValueProcessor
 
             'json' => static function (string $v): mixed {
                 try {
-                    return json_decode($v, true, 512, JSON_THROW_ON_ERROR);
+                    return json_decode(json: $v, associative: true, depth: 512, flags: JSON_THROW_ON_ERROR);
                 } catch (\JsonException $e) {
                     throw ProcessorException::typeCastFailed('json', $e->getMessage());
                 }

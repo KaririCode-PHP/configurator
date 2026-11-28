@@ -5,10 +5,22 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Event;
 
 /**
- * Emitted after a configuration file is successfully loaded and merged.
+ * Reports, through PSR-14, that a configuration file was loaded and
+ * merged.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Preconditions: `$filePath` is the path passed to load().
+ *
+ * Thread-safety: immutable; safe to share between fibers and requests.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $listeners->listen(ConfigLoaded::class, static fn(ConfigLoaded $event) => $loaded[] = $event->filePath);
+ *
+ * References: PSR-14. ARFA 1.3 P5: observable lifecycle.
+ *
+ * @since 4.2.0
  */
 final readonly class ConfigLoaded
 {

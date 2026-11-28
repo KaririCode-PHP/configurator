@@ -13,6 +13,9 @@ use KaririCode\Contract\Exception\NotFound;
 use KaririCode\Contract\Exception\Protocol;
 use KaririCode\Contract\Exception\Runtime;
 use KaririCode\Contract\Exception\Validation;
+use PhpParser\Node;
+use PhpParser\NodeFinder;
+use PhpParser\ParserFactory;
 use PhpToken;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
@@ -39,6 +42,11 @@ final class ArfaConformanceTest extends TestCase
     /** The concrete exceptions of the package, each built by named constructors only. */
     private const array EXCEPTIONS = ['AccessException', 'LoaderException', 'MergeException', 'ProcessorException', 'ValidationException'];
 
+    private const int MARKER_WIDTH = 72;
+
+    /** Comment criteria C2–C5 of Spec V4.3.3 §17; C1 is the summary sentence that opens the docblock. */
+    private const array COMMENT_MARKERS = ['Preconditions:', 'Thread-safety:', 'Side effects:', 'Example', 'References:'];
+
     /** The eight gates of Spec V4.3.3 §29.1. */
     private const array QUALITY_GATES = ['test', 'test-conformance', 'phpstan', 'psalm', 'cs-check', 'complexity', 'mutation', 'security'];
 
@@ -54,6 +62,36 @@ final class ArfaConformanceTest extends TestCase
             self::assertStringStartsWith("<?php\n\ndeclare(strict_types=1);\n", $code, $relative);
             self::assertSame(1, self::namedTypeDeclarations($code), $relative);
             self::assertSame(basename($relative, '.php'), self::reflect($relative)->getShortName(), $relative);
+        }
+    }
+
+    #[Test]
+    public function docblocksMeetTheFiveCommentCriteria(): void
+    {
+        foreach (self::sourceFiles() as $relative => $code) {
+            $doc = (string) self::reflect($relative)->getDocComment();
+            $summary = trim((string) preg_replace('#^/\*\*\s*\*\s*#', '', $doc));
+
+            self::assertNotSame('', $doc, $relative . ': C1 role');
+            self::assertDoesNotMatchRegularExpression('/^(Represents|This (class|interface|enum|trait)|Class|Interface)\b/', $summary, $relative . ': C1 states a role, not a restatement');
+
+            foreach (self::COMMENT_MARKERS as $marker) {
+                self::assertStringContainsString($marker, $doc, $relative);
+            }
+
+            self::assertDoesNotMatchRegularExpression('/@(package|author|license)\b/', $code, $relative);
+        }
+    }
+
+    #[Test]
+    public function sectionMarkersAreSeventyTwoColumnsWide(): void
+    {
+        foreach ([...self::sourceFiles(), ...self::phpFiles(self::ROOT . '/tests')] as $relative => $code) {
+            foreach (explode("\n", $code) as $number => $line) {
+                if (str_starts_with(ltrim($line), '// ─')) {
+                    self::assertSame(self::MARKER_WIDTH, mb_strlen(ltrim($line)), sprintf('%s:%d', $relative, $number + 1));
+                }
+            }
         }
     }
 
@@ -165,6 +203,78 @@ final class ArfaConformanceTest extends TestCase
                 self::assertNotContains(strtolower($method->getName()), $forbiddenMethods, $relative);
             }
         }
+    }
+
+    /**
+     * Public data is read through properties: no public get method without
+     * parameters and no set method with exactly one. A get that takes a
+     * path, like the Configurator's typed accessors, is a lookup.
+     */
+    #[Test]
+    public function publicMethodsAreNotAccessors(): void
+    {
+        foreach (self::sourceFiles() as $relative => $code) {
+            $type = self::reflect($relative);
+
+            foreach ($type->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+                if ($method->getDeclaringClass()->getName() !== $type->getName()) {
+                    continue;
+                }
+
+                $where = $relative . '::' . $method->getName();
+                self::assertFalse(preg_match('/\Aget[A-Z]/', $method->getName()) === 1 && $method->getNumberOfParameters() === 0, $where . ': getter');
+                self::assertFalse(preg_match('/\Aset[A-Z]/', $method->getName()) === 1 && $method->getNumberOfParameters() === 1, $where . ': setter');
+            }
+        }
+    }
+
+    /** A pattern anchors its end with `\z`: `$` also matches before a trailing newline. */
+    #[Test]
+    public function regexesAnchorTheEndWithBackslashZ(): void
+    {
+        $patterns = 0;
+
+        foreach (self::sourceFiles() as $relative => $code) {
+            foreach (PhpToken::tokenize($code) as $token) {
+                // Whole patterns only; the fragments of a pattern built at run time are left out.
+                if ($token->is(T_CONSTANT_ENCAPSED_STRING) && preg_match("#\\A'/.*/[a-z]*'\\z#s", $token->text) === 1) {
+                    ++$patterns;
+                    self::assertDoesNotMatchRegularExpression("#\\$/[a-z]*'\\z#", $token->text, $relative);
+                }
+            }
+        }
+
+        self::assertGreaterThan(0, $patterns);
+    }
+
+    #[Test]
+    public function callSitesWithThreeOrMoreArgumentsNameThem(): void
+    {
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $finder = new NodeFinder();
+        $offenders = [];
+        $checked = 0;
+
+        foreach (self::sourceFiles() as $relative => $code) {
+            foreach ($finder->findInstanceOf($parser->parse($code) ?? [], Node\Expr\CallLike::class) as $call) {
+                if ($call->isFirstClassCallable() || count($call->getArgs()) < 3 || self::isVariadicFormatting($call)) {
+                    continue;
+                }
+
+                ++$checked;
+
+                foreach ($call->getArgs() as $argument) {
+                    if ($argument->name === null && !$argument->unpack) {
+                        $offenders[] = sprintf('%s:%d', $relative, $call->getStartLine());
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        self::assertGreaterThan(0, $checked);
+        self::assertSame([], $offenders, 'Spec V4.3.3 §30: name the arguments of every call with three or more.');
     }
 
     #[Test]
@@ -438,6 +548,13 @@ final class ArfaConformanceTest extends TestCase
         }
 
         return $count;
+    }
+
+    private static function isVariadicFormatting(Node\Expr\CallLike $call): bool
+    {
+        return $call instanceof Node\Expr\FuncCall
+            && $call->name instanceof Node\Name
+            && in_array(needle: $call->name->toLowerString(), haystack: ['sprintf', 'printf', 'vsprintf'], strict: true);
     }
 
     private static function countTokens(string $code, int $kind): int

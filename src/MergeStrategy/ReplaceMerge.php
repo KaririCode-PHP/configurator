@@ -7,14 +7,24 @@ namespace KaririCode\Configurator\MergeStrategy;
 use KaririCode\Configurator\Contract\MergeStrategy;
 
 /**
- * Flat replacement merge — source completely overwrites base
- * at the top level. Nested structures are NOT recursively merged.
+ * Merges a configuration source into the loaded tree at the top level
+ * only: a key the source defines replaces the loaded value whole, nested
+ * maps included, for sources that are complete on their own.
  *
- * Useful when each configuration source is self-contained and
- * partial overrides are not desired.
+ * Preconditions: none; any two arrays merge.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: stateless; one instance serves every caller.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $merged = new ReplaceMerge()->merge(['db' => ['host' => 'a', 'port' => 5432]], ['db' => ['host' => 'b']]);
+ *     // ['db' => ['host' => 'b']]
+ *
+ * References: ADR-001. ARFA 1.3 P2: a pure combination of two trees.
+ *
+ * @since 4.2.0
  */
 final readonly class ReplaceMerge implements MergeStrategy
 {

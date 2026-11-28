@@ -7,14 +7,25 @@ namespace KaririCode\Configurator\Contract;
 use KaririCode\Configurator\Exception\MergeException;
 
 /**
- * Strategy for merging two configuration arrays.
+ * Decides how a later configuration source combines with what is already
+ * loaded when keys overlap; RecursiveMerge (the default) and
+ * ReplaceMerge are built in (ADR-001).
  *
- * Defines how overlapping keys are resolved when multiple
- * configuration sources are loaded sequentially. Two built-in
- * strategies: recursive deep-merge and flat replace (ADR-001).
+ * Preconditions: merge() returns a new array and leaves both arguments
+ * unchanged; it may reject a combination with MergeException.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: implementations are stateless.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $config = ConfigurationBuilder::create()->withMergeStrategy(new ReplaceMerge())->build();
+ *
+ * References: ADR-001, ADR-011. ARFA 1.3 P2: a pure combination of two
+ * trees.
+ *
+ * @since 4.2.0
  */
 interface MergeStrategy
 {

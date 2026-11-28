@@ -9,21 +9,27 @@ use KaririCode\Configurator\ConfigurationBuilder;
 use KaririCode\Configurator\Contract\Configurator;
 
 /**
- * Factory for registering Configuration in PSR-11 containers.
+ * Hands a PSR-11 container a factory for the application configuration,
+ * so the configurator stays independent of any container: the closure
+ * builds a sealed Configuration from a directory and an optional
+ * environment overlay when the container first asks for it.
  *
- * Provides static factory methods that return closures suitable
- * for container registration. Decouples the Configurator from
- * any specific DI container implementation.
+ * Preconditions: the directory exists when the closure runs, not when it
+ * is created.
  *
- * Usage with KaririCode\DependencyInjection:
- *   $container->register(Configurator::class, Psr11Bridge::factory('/app/config'));
+ * Thread-safety: stateless; the closure captures only its two arguments.
  *
- * Usage with any PSR-11 container:
- *   $factory = Psr11Bridge::factory('/app/config', 'production');
- *   $container->set(Configurator::class, $factory);
+ * Side effects: none until the closure runs; then it reads the
+ * configured files.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Example:
+ *
+ *     $container->set(Configurator::class, Psr11Bridge::factory('/app/config', 'production'));
+ *
+ * References: SPEC-CONFIGURATOR §12; PSR-11. ARFA 1.3 P4: no container
+ * lock-in.
+ *
+ * @since 4.2.0
  */
 final class Psr11Bridge
 {

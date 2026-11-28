@@ -19,28 +19,45 @@ use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use KaririCode\Configurator\Processor\ValueProcessorChain;
 
 /**
- * Centralized, immutable configuration manager.
+ * Holds the configuration of an application: it loads PHP, JSON, YAML,
+ * INI and TOML files through pluggable loaders, merges them with a
+ * strategy, runs the value processors (interpolation, casts, decryption)
+ * and the schema check when sealed, and answers typed dot-notation reads
+ * from then on.
  *
- * Loads configuration from PHP, JSON, and YAML files using pluggable
- * loaders, merges them via a configurable strategy, applies value
- * processors (environment interpolation, type casting, decryption),
- * optionally validates against a schema, and exposes values through
- * type-safe dot-notation accessors. After the loading phase, the
- * internal state is sealed and any mutation attempt raises
- * AccessException.
+ * Two phases: while loading, load(), merge() and registerLoader() build
+ * the tree; seal() runs the processors and the validator and freezes it,
+ * after which any change raises AccessException (CFG_2801). The computed
+ * properties `$count`, `$isEmpty` and `$keys` are PHP 8.4 get hooks over
+ * the top level.
  *
- * PHP 8.4 features used:
- *   - Property hooks for computed properties (count, isEmpty, keys)
- *   - Asymmetric visibility for controlled mutation during loading
+ * Preconditions: load() and merge() run before seal(); a typed read of a
+ * path that holds another type raises AccessException (CFG_2800), while
+ * get() never throws and returns the default for a missing path or a
+ * stored null.
+ *
+ * Thread-safety: mutable while loading; once sealed, safe to share
+ * between fibers and requests.
+ *
+ * Side effects: load() reads the file it is given (PhpLoader includes
+ * it); seal() runs the processors, which may read the environment or
+ * files (TypeCastProcessor `file:`).
+ *
+ * Example:
+ *
+ *     $config = new Configuration();
+ *     $config->load('/app/config/app.yaml')->merge(['app' => ['debug' => false]])->seal();
+ *     $port = $config->getInt('server.port', 8080);
+ *
+ * References: ADR-001, ADR-003, ADR-005; SPEC-CONFIGURATOR §5, §8. ARFA
+ * 1.3 P1: an immutable value once sealed.
  *
  * @see ConfigurationBuilder For fluent construction
- *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * @since 4.2.0
  */
 final class Configuration implements Configurator
 {
-    // ── State ─────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────
 
     /** @var array<array-key, mixed> */
     private array $data = [];
@@ -50,7 +67,7 @@ final class Configuration implements Configurator
 
     private bool $sealed = false;
 
-    // ── Computed Properties (PHP 8.4 Property Hooks) ──────────────────
+    // ── Computed Properties (PHP 8.4 Property Hooks) ─────────────────────
 
     public int $count {
         get => count($this->data);
@@ -65,7 +82,7 @@ final class Configuration implements Configurator
         get => array_keys($this->data);
     }
 
-    // ── Constructor ───────────────────────────────────────────────────
+    // ── Constructor ──────────────────────────────────────────────────────
 
     public function __construct(
         private readonly MergeStrategy $mergeStrategy = new RecursiveMerge(),
@@ -75,7 +92,7 @@ final class Configuration implements Configurator
         $this->registerDefaultLoaders();
     }
 
-    // ── Loading ───────────────────────────────────────────────────────
+    // ── Loading ──────────────────────────────────────────────────────────
 
     /**
      * Loads a configuration file, merging its contents into the
@@ -139,7 +156,7 @@ final class Configuration implements Configurator
         return $this;
     }
 
-    // ── Typed Accessors (Configurator contract) ───────────────────────
+    // ── Typed Accessors (Configurator contract) ──────────────────────────
 
     #[\Override]
     public function get(string $path, mixed $default = null): mixed
@@ -161,7 +178,7 @@ final class Configuration implements Configurator
             return (string) $value;
         }
 
-        throw AccessException::typeMismatch($path, 'string', get_debug_type($value));
+        throw AccessException::typeMismatch(path: $path, expected: 'string', actual: get_debug_type($value));
     }
 
     #[\Override]
@@ -182,7 +199,7 @@ final class Configuration implements Configurator
             return (int) $value;
         }
 
-        throw AccessException::typeMismatch($path, 'int', get_debug_type($value));
+        throw AccessException::typeMismatch(path: $path, expected: 'int', actual: get_debug_type($value));
     }
 
     #[\Override]
@@ -203,7 +220,7 @@ final class Configuration implements Configurator
             return (float) $value;
         }
 
-        throw AccessException::typeMismatch($path, 'float', get_debug_type($value));
+        throw AccessException::typeMismatch(path: $path, expected: 'float', actual: get_debug_type($value));
     }
 
     #[\Override]
@@ -224,7 +241,7 @@ final class Configuration implements Configurator
             return match (strtolower($value)) {
                 'true', '1', 'yes', 'on' => true,
                 'false', '0', 'no', 'off', '' => false,
-                default => throw AccessException::typeMismatch($path, 'bool', 'a string outside true, false, 1, 0, yes, no, on, off'),
+                default => throw AccessException::typeMismatch(path: $path, expected: 'bool', actual: 'a string outside true, false, 1, 0, yes, no, on, off'),
             };
         }
 
@@ -232,7 +249,7 @@ final class Configuration implements Configurator
             return $value !== 0;
         }
 
-        throw AccessException::typeMismatch($path, 'bool', get_debug_type($value));
+        throw AccessException::typeMismatch(path: $path, expected: 'bool', actual: get_debug_type($value));
     }
 
     /**
@@ -254,7 +271,7 @@ final class Configuration implements Configurator
             return $value;
         }
 
-        throw AccessException::typeMismatch($path, 'array', get_debug_type($value));
+        throw AccessException::typeMismatch(path: $path, expected: 'array', actual: get_debug_type($value));
     }
 
     #[\Override]
@@ -269,7 +286,7 @@ final class Configuration implements Configurator
         return $this->data;
     }
 
-    // ── Loader Registration ───────────────────────────────────────────
+    // ── Loader Registration ──────────────────────────────────────────────
 
     /**
      * Registers a custom loader for a specific file extension.
@@ -287,7 +304,7 @@ final class Configuration implements Configurator
         return $this;
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * Resolves a dot-notation path to a value within the data tree.

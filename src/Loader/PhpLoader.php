@@ -8,22 +8,30 @@ use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loads configuration from native PHP files that return arrays.
+ * Loads PHP files that return an array, the fastest format once OPcache
+ * holds the compiled file, and the only one that may compute values
+ * (getenv(), conditionals, closures).
  *
- * Fastest loader in the chain — the file is compiled by PHP's
- * opcache on first access, making subsequent loads effectively
- * a memory read. Supports closures, conditionals, and dynamic
- * values (e.g. getenv() calls inside the returned array).
+ * The path is resolved to its real path (symlinks and `..` followed) and
+ * the file runs in a static closure, so it cannot reach the loader.
+ * Which files may load is the caller's decision: the loader confines
+ * nothing.
  *
- * Security: the file is resolved to its canonical real path
- * (following symlinks and '..') and executed in an isolated scope
- * so the included file cannot access $this. Path containment against
- * an allowed base directory is the caller's responsibility — this
- * loader receives an already-resolved path from the directory scan
- * and does not restrict which paths may be loaded.
+ * Preconditions: the file is trusted code; it returns an array.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: stateless; one instance serves every caller.
+ *
+ * Side effects: load() executes the file, with whatever side effects its
+ * code has.
+ *
+ * Example:
+ *
+ *     $data = new PhpLoader()->load('/app/config/app.php');
+ *
+ * References: ADR-011; OWASP ASVS 5.0 V15 (the configuration is code the
+ * deployment trusts). ARFA 1.3 P4: one format per loader.
+ *
+ * @since 4.2.0
  */
 final readonly class PhpLoader implements Loader
 {

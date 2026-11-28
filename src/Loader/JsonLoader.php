@@ -8,14 +8,23 @@ use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loads configuration from JSON files.
+ * Loads JSON files (RFC 8259) with `json_decode` in strict mode: objects
+ * become associative arrays, and a document whose top level is not an
+ * object or an array is rejected.
  *
- * Uses native json_decode with JSON_THROW_ON_ERROR for strict
- * parsing. Supports standard JSON (RFC 8259) including nested
- * objects, arrays, and all scalar types.
+ * Preconditions: the file is UTF-8 text.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: stateless; one instance serves every caller.
+ *
+ * Side effects: load() reads the file.
+ *
+ * Example:
+ *
+ *     $data = new JsonLoader()->load('/app/config/services.json');
+ *
+ * References: RFC 8259, ADR-011. ARFA 1.3 P4: one format per loader.
+ *
+ * @since 4.2.0
  */
 final readonly class JsonLoader implements Loader
 {
@@ -33,7 +42,7 @@ final readonly class JsonLoader implements Loader
         }
 
         try {
-            $data = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            $data = json_decode(json: $content, associative: true, depth: 512, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
             throw LoaderException::parseError($path, $exception->getMessage());
         }

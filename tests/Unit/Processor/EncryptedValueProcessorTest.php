@@ -19,7 +19,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $this->hexKey = bin2hex($this->rawKey);
     }
 
-    // ── supports() ────────────────────────────────────────────────────
+    // ── supports() ───────────────────────────────────────────────────────
 
     public function testSupportsEncEnvelope(): void
     {
@@ -39,7 +39,7 @@ final class EncryptedValueProcessorTest extends TestCase
         self::assertFalse($processor->supports(42));
     }
 
-    // ── Round-trip ────────────────────────────────────────────────────
+    // ── Round-trip ───────────────────────────────────────────────────────
 
     public function testEncryptDecryptRoundTrip(): void
     {
@@ -101,7 +101,7 @@ final class EncryptedValueProcessorTest extends TestCase
         self::assertNotSame($enc1, $enc2);
     }
 
-    // ── Error cases ───────────────────────────────────────────────────
+    // ── Error cases ──────────────────────────────────────────────────────
 
     public function testInvalidKeyLengthThrows(): void
     {
@@ -155,7 +155,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $processor->process('ENC(' . base64_encode('short') . ')');
     }
 
-    // ── Non-string pass-through ───────────────────────────────────────
+    // ── Non-string pass-through ──────────────────────────────────────────
 
     public function testNonStringPassesThrough(): void
     {

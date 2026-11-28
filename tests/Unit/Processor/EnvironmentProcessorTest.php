@@ -24,7 +24,7 @@ final class EnvironmentProcessorTest extends TestCase
         ]);
     }
 
-    // ── supports() ────────────────────────────────────────────────────
+    // ── supports() ───────────────────────────────────────────────────────
 
     public function testSupportsStringWithDollarBrace(): void
     {
@@ -53,7 +53,7 @@ final class EnvironmentProcessorTest extends TestCase
         self::assertFalse($processor->supports('{DB_HOST}'));
     }
 
-    // ── Simple interpolation ──────────────────────────────────────────
+    // ── Simple interpolation ─────────────────────────────────────────────
 
     public function testResolvesSingleVariable(): void
     {
@@ -82,7 +82,7 @@ final class EnvironmentProcessorTest extends TestCase
         );
     }
 
-    // ── Default values ────────────────────────────────────────────────
+    // ── Default values ───────────────────────────────────────────────────
 
     public function testUsesDefaultWhenVariableUndefined(): void
     {
@@ -112,7 +112,7 @@ final class EnvironmentProcessorTest extends TestCase
         self::assertSame('', $processor->process('${MISSING:}'));
     }
 
-    // ── Strict mode ───────────────────────────────────────────────────
+    // ── Strict mode ──────────────────────────────────────────────────────
 
     public function testStrictModeThrowsOnUndefinedVariable(): void
     {
@@ -138,7 +138,7 @@ final class EnvironmentProcessorTest extends TestCase
         self::assertSame('', $processor->process('${UNDEFINED_VAR}'));
     }
 
-    // ── Nested defaults ───────────────────────────────────────────────
+    // ── Nested defaults ──────────────────────────────────────────────────
 
     public function testNestedDefaultFallback(): void
     {
@@ -204,7 +204,7 @@ final class EnvironmentProcessorTest extends TestCase
         );
     }
 
-    // ── Edge cases ────────────────────────────────────────────────────
+    // ── Edge cases ───────────────────────────────────────────────────────
 
     public function testEmptyVariableReturnsEmptyString(): void
     {

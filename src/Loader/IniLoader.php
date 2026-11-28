@@ -8,29 +8,31 @@ use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loads configuration from INI files.
+ * Loads INI files with PHP's own parser (`parse_ini_string`,
+ * INI_SCANNER_TYPED): booleans, numbers and null come typed, sections
+ * become nested arrays, and dotted keys expand into the same nesting, so
+ * `[database] host = x` and `database.host = x` both give `['database'
+ * => ['host' => 'x']]`.
  *
- * Uses native parse_ini_string with INI_SCANNER_TYPED, so values
- * are auto-typed: true/false/on/off/yes/no become booleans, numeric
- * strings become int or float, and null/none become null. Sections
- * ([section]) become nested arrays.
+ * Native parsing executes nothing and needs no grammar of its own. INI
+ * has no array syntax beyond repeated keys; nested lists need PHP, JSON,
+ * YAML or TOML.
  *
- * Dotted keys are expanded into nested structures to match the
- * configuration dot-notation model. Both forms produce the same
- * shape:
+ * Preconditions: the file is UTF-8 text; any parser warning fails the
+ * load.
  *
- *   [database]              database.host = localhost
- *   host = localhost   ≡    (at top level)
+ * Thread-safety: stateless; one instance serves every caller.
  *
- * yields ['database' => ['host' => 'localhost']] either way.
+ * Side effects: load() reads the file and installs an error handler for
+ * the duration of the parse.
  *
- * Native parsing means no code execution (unlike PHP files) and no
- * hand-written grammar. Scope: INI has no native array syntax beyond
- * repeated keys, so nested sequences require the PHP/JSON/YAML
- * formats.
+ * Example:
  *
- * @package KaririCode\Configurator
- * @since   4.2.0 ARFA 1.3
+ *     $data = new IniLoader()->load('/app/config/app.ini');
+ *
+ * References: ADR-008, ADR-011. ARFA 1.3 P4: one format per loader.
+ *
+ * @since 4.2.0
  */
 final readonly class IniLoader implements Loader
 {
@@ -57,7 +59,7 @@ final readonly class IniLoader implements Loader
         });
 
         try {
-            $parsed = parse_ini_string($content, true, INI_SCANNER_TYPED);
+            $parsed = parse_ini_string(ini_string: $content, process_sections: true, scanner_mode: INI_SCANNER_TYPED);
         } finally {
             restore_error_handler();
         }
@@ -75,7 +77,7 @@ final readonly class IniLoader implements Loader
         return $extension === 'ini';
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * Expands dotted keys into nested arrays, recursing into sections.

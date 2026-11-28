@@ -10,30 +10,33 @@ use KaririCode\Contract\Configuration\ValueProcessor;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
- * Interpolates environment variable references within string values.
+ * Interpolates environment references in configuration strings:
+ * `${VAR}`, `${VAR:default}` and the shell form `${VAR:-default}`,
+ * defaults nested (`${DB_HOST:${FALLBACK_HOST:localhost}}`), compatible
+ * with Docker Compose and phpdotenv.
  *
- * Syntax (compatible with Docker Compose, shell, and phpdotenv):
- *   ${VAR}           — resolves VAR, throws if undefined and strict
- *   ${VAR:default}   — resolves VAR, falls back to 'default'
- *   ${VAR:-default}  — same as above (bash-style default operator)
+ * In strict mode (the default) a reference without a value or a default
+ * raises ProcessorException (CFG_2830), so a missing variable stops the
+ * boot instead of becoming an empty string. The resolver is any
+ * EnvironmentResolver: the process (the default), a .env store, a map
+ * for tests, a vault.
  *
- * Supports recursive interpolation: ${DB_HOST:${FALLBACK_HOST:localhost}}
+ * Preconditions: values are strings; references nest without a depth
+ * limit other than the string itself.
  *
- * When strict mode is enabled (default), referencing an undefined
- * variable without a default value raises ProcessorException.
- * This prevents silent misconfiguration in production deployments.
+ * Thread-safety: immutable; as safe as its resolver.
  *
- * The resolver can be any EnvironmentResolver implementation:
- *   - SystemEnvironmentResolver (default — $_ENV → $_SERVER → getenv())
- *   - DotenvEnvironmentResolver (from kariricode/dotenv — .env + system)
- *   - InMemoryEnvironmentResolver (testing)
- *   - Custom (Vault, AWS SSM, Azure Key Vault)
+ * Side effects: each reference asks the resolver.
  *
- * Ref: IEEE Std 1003.1 (POSIX) §2.6.2 Parameter Expansion;
- *      Docker Compose variable substitution specification.
+ * Example:
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ *     $processor = new EnvironmentProcessor(new InMemoryEnvironmentResolver(['HOST' => 'db']));
+ *     $dsn = $processor->process('pgsql:host=${HOST};port=${PORT:5432}'); // pgsql:host=db;port=5432
+ *
+ * References: POSIX.1-2017 §2.6.2 (parameter expansion), ADR-004; Spec
+ * V4.3.3 §8.3 (fail closed).
+ *
+ * @since 4.2.0
  */
 final readonly class EnvironmentProcessor implements ValueProcessor
 {
@@ -62,7 +65,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
         return $this->interpolate($value);
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * Walks the string, finds balanced ${...} references, resolves each.
@@ -79,7 +82,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
         while ($i < $length) {
             // Look for ${ start marker
             if ($i + 1 < $length && $input[$i] === '$' && $input[$i + 1] === '{') {
-                $expression = $this->extractBalancedExpression($input, $i + 2, $length);
+                $expression = $this->extractBalancedExpression(input: $input, start: $i + 2, length: $length);
 
                 if ($expression !== null) {
                     $result .= $this->resolveReference($expression['content']);
@@ -124,7 +127,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
 
                 if ($depth === 0) {
                     return [
-                        'content' => substr($input, $start, $pos - $start),
+                        'content' => substr(string: $input, offset: $start, length: $pos - $start),
                         'endPos' => $pos + 1,
                     ];
                 }
@@ -185,7 +188,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
         for ($i = 0; $i < $length; ++$i) {
             $char = $expression[$i];
 
-            if (substr($expression, $i, 2) === '${') {
+            if (substr(string: $expression, offset: $i, length: 2) === '${') {
                 ++$depth;
                 ++$i; // skip '{'
 
@@ -204,7 +207,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
 
                 // Strip optional leading '-' (bash :-default syntax)
                 return [
-                    'name' => substr($expression, 0, $i),
+                    'name' => substr(string: $expression, offset: 0, length: $i),
                     'default' => str_starts_with($default, '-') ? substr($default, 1) : $default,
                 ];
             }

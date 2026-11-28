@@ -15,17 +15,31 @@ use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
 /**
- * Decorates Configuration with PSR-14 event dispatching.
+ * Adds PSR-14 lifecycle events to a configuration: ConfigLoaded after
+ * each file, ConfigLoadError before a load failure is rethrown, and
+ * ConfigSealed after seal(), for audit logs and observability.
  *
- * Emits lifecycle events: ConfigLoaded (after each file),
- * ConfigSealed (after seal), ConfigLoadError (on failure).
- * This enables observability, audit logging, and reactive
- * configuration hot-reloading in long-running processes.
+ * It owns the Configuration it decorates and exposes it as `$inner` for
+ * what the bridge does not wrap (registerLoader(), merge()); loading
+ * through `$inner` emits no events.
  *
- * Requires: kariricode/event-dispatcher (PSR-14 EventDispatcherInterface)
+ * Preconditions: load() runs before seal(), as on Configuration.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: mutable while loading, through the configuration it
+ * owns; safe to share once sealed.
+ *
+ * Side effects: load() reads the file; every lifecycle step dispatches
+ * an event to the listeners.
+ *
+ * Example:
+ *
+ *     $config = new EventDispatcherBridge($dispatcher);
+ *     $config->load('/app/config/app.yaml')->seal();
+ *
+ * References: ADR-003, ADR-006; PSR-14. ARFA 1.3 P5: observable
+ * lifecycle.
+ *
+ * @since 4.2.0
  */
 final readonly class EventDispatcherBridge implements Configurator
 {
@@ -71,7 +85,7 @@ final readonly class EventDispatcherBridge implements Configurator
         return $this;
     }
 
-    // ── Configurator contract delegation ──────────────────────────────
+    // ── Configurator contract delegation ─────────────────────────────────
 
     #[\Override]
     public function get(string $path, mixed $default = null): mixed

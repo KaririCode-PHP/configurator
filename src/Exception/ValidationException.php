@@ -53,7 +53,7 @@ final class ValidationException extends ConfigurationBase implements Configurati
     /** @param list<string> $violations */
     public static function schemaViolations(array $violations): self
     {
-        $summary = implode('; ', array_slice($violations, 0, 5));
+        $summary = implode('; ', array_slice(array: $violations, offset: 0, length: 5));
         $count = count($violations);
 
         return new self(

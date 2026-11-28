@@ -26,7 +26,7 @@ final class IniLoaderTest extends TestCase
         rmdir($this->fixtureDir);
     }
 
-    // ── Extension Support ─────────────────────────────────────────────
+    // ── Extension Support ────────────────────────────────────────────────
 
     public function testSupportsIniExtension(): void
     {
@@ -35,7 +35,7 @@ final class IniLoaderTest extends TestCase
         self::assertFalse($this->loader->supports('json'));
     }
 
-    // ── Sections and Typed Scanning ───────────────────────────────────
+    // ── Sections and Typed Scanning ──────────────────────────────────────
 
     public function testSectionsBecomeNestedArrays(): void
     {
@@ -67,7 +67,7 @@ final class IniLoaderTest extends TestCase
         self::assertFalse(self::at($result, 'flags', 'd'));
     }
 
-    // ── Dotted-Key Expansion ──────────────────────────────────────────
+    // ── Dotted-Key Expansion ─────────────────────────────────────────────
 
     public function testTopLevelDottedKeysExpand(): void
     {
@@ -101,7 +101,7 @@ final class IniLoaderTest extends TestCase
         self::assertSame('deep', self::at($result, 'a', 'b', 'c', 'd'));
     }
 
-    // ── Errors ────────────────────────────────────────────────────────
+    // ── Errors ───────────────────────────────────────────────────────────
 
     public function testThrowsForNonExistentFile(): void
     {
@@ -118,7 +118,7 @@ final class IniLoaderTest extends TestCase
         $this->load("[unterminated\nkey = value\n");
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
     /** @return array<mixed> */
     private function load(string $content): array

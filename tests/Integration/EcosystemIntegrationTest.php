@@ -24,7 +24,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class EcosystemIntegrationTest extends TestCase
 {
-    // ── Contract Compliance ───────────────────────────────────────────
+    // ── Contract Compliance ──────────────────────────────────────────────
 
     /**
      * @return iterable<string, array{class-string, class-string}>
@@ -49,7 +49,7 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertTrue(is_subclass_of($implementation, $contract));
     }
 
-    // ── withDotenv() ──────────────────────────────────────────────────────
+    // ── withDotenv() ─────────────────────────────────────────────────────
 
     public function testWithDotenvInterpolatesFromTheResolver(): void
     {
@@ -142,7 +142,7 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertSame('xy', $config->getString('key'));
     }
 
-    // ── Ecosystem Provider via Canonical Interface ────────────────────
+    // ── Ecosystem Provider via Canonical Interface ───────────────────────
 
     public function testBuilderAcceptsEcosystemConfigProvider(): void
     {
@@ -173,7 +173,7 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertSame(4, $config->getInt('queue.workers'));
     }
 
-    // ── Ecosystem Processor via Canonical Interface ───────────────────
+    // ── Ecosystem Processor via Canonical Interface ──────────────────────
 
     public function testBuilderAcceptsEcosystemValueProcessor(): void
     {
@@ -198,7 +198,7 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertSame('HELLO WORLD', $config->getString('greeting'));
     }
 
-    // ── Full Pipeline: Dotenv + TypeCast + Encrypted ──────────────────
+    // ── Full Pipeline: Dotenv + TypeCast + Encrypted ─────────────────────
 
     public function testFullPipelineWithDotenv(): void
     {

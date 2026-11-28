@@ -8,16 +8,25 @@ use KaririCode\Configurator\Exception\LoaderException;
 
 /**
  * Encodes a Unicode scalar value as UTF-8 for the escape sequences of
- * the built-in YAML and TOML parsers, without ext-mbstring or ext-intl.
+ * the YAML and TOML parsers, without ext-mbstring or ext-intl;
+ * surrogates (U+D800–U+DFFF) and values above U+10FFFF are rejected,
+ * because valid UTF-8 cannot carry them.
  *
- * Surrogates (U+D800–U+DFFF) and values above U+10FFFF are rejected:
- * they are not Unicode scalar values and cannot be encoded as valid
- * UTF-8.
+ * Preconditions: used by the parsers on the code point of an escape
+ * sequence.
+ *
+ * Thread-safety: stateless; one instance serves every caller.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $snowman = $this->encodeCodePoint(0x2603); // "\u{2603}"
+ *
+ * References: Unicode 15 §3.9 (D76 Unicode scalar value), RFC 3629.
  *
  * @internal Shared by YamlLoader and TomlLoader.
- *
- * @package KaririCode\Configurator
- * @since   4.2.0 ARFA 1.3
+ * @since 4.2.0
  */
 trait Utf8Encoding
 {

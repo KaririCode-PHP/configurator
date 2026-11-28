@@ -9,23 +9,28 @@ use KaririCode\Configurator\ConfigurationBuilder;
 use KaririCode\Contract\Processor\Processor;
 
 /**
- * Exposes configuration loading as a ProcessorPipeline step.
+ * Runs configuration loading as a step of a
+ * kariricode/processor-pipeline flow: process() builds a sealed
+ * Configuration from a directory, an optional environment overlay and
+ * extra files, and returns it as the step's output; the input is
+ * ignored.
  *
- * Enables configuration to participate in ARFA 1.3 reactive flows.
- * The processor loads configuration files and injects the sealed
- * Configuration instance into the processing context.
+ * Preconditions: the directory exists; the extra files load after the
+ * directory, in the order given.
  *
- * Usage within a pipeline:
- *   $pipeline->through([
- *       new ConfigurationProcessor('/app/config'),
- *       new DatabaseProcessor(),
- *       new CacheProcessor(),
- *   ]);
+ * Thread-safety: immutable; each process() call builds a new
+ * configuration.
  *
- * Requires: kariricode/contract (Processor)
+ * Side effects: process() reads the configured files.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Example:
+ *
+ *     $config = new ConfigurationProcessor('/app/config', environment: 'production')->process(null);
+ *
+ * References: SPEC-CONFIGURATOR §12; kariricode/contract
+ * `Processor\Processor`. ARFA 1.3 P2: configuration as a flow step.
+ *
+ * @since 4.2.0
  */
 final readonly class ConfigurationProcessor implements Processor
 {

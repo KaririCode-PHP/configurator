@@ -27,7 +27,7 @@ final class TomlLoaderTest extends TestCase
         rmdir($this->fixtureDir);
     }
 
-    // ── Extension Support ─────────────────────────────────────────────
+    // ── Extension Support ────────────────────────────────────────────────
 
     public function testSupportsTomlExtension(): void
     {
@@ -35,7 +35,7 @@ final class TomlLoaderTest extends TestCase
         self::assertFalse($this->loader->supports('ini'));
     }
 
-    // ── Scalars ───────────────────────────────────────────────────────
+    // ── Scalars ──────────────────────────────────────────────────────────
 
     public function testStringIntFloatBool(): void
     {
@@ -87,7 +87,7 @@ final class TomlLoaderTest extends TestCase
         self::assertNan($result['c']);
     }
 
-    // ── Tables and Keys ───────────────────────────────────────────────
+    // ── Tables and Keys ──────────────────────────────────────────────────
 
     public function testTable(): void
     {
@@ -120,7 +120,7 @@ final class TomlLoaderTest extends TestCase
         self::assertSame('y', self::at($result, 'db', 'name'));
     }
 
-    // ── Arrays and Inline Tables ──────────────────────────────────────
+    // ── Arrays and Inline Tables ─────────────────────────────────────────
 
     public function testArrays(): void
     {
@@ -159,7 +159,7 @@ final class TomlLoaderTest extends TestCase
         self::assertSame([], $result['b']);
     }
 
-    // ── Comments ──────────────────────────────────────────────────────
+    // ── Comments ─────────────────────────────────────────────────────────
 
     public function testCommentsStripped(): void
     {
@@ -175,7 +175,7 @@ final class TomlLoaderTest extends TestCase
         self::assertSame('http://example.com#frag', $result['url']);
     }
 
-    // ── Unsupported Feature Detection ─────────────────────────────────
+    // ── Unsupported Feature Detection ────────────────────────────────────
 
     public function testDetectsArrayOfTables(): void
     {
@@ -201,7 +201,7 @@ final class TomlLoaderTest extends TestCase
         $this->load("created = 1979-05-27T07:32:00Z\n");
     }
 
-    // ── Errors ────────────────────────────────────────────────────────
+    // ── Errors ───────────────────────────────────────────────────────────
 
     public function testThrowsForNonExistentFile(): void
     {
@@ -210,9 +210,9 @@ final class TomlLoaderTest extends TestCase
         $this->loader->load($this->fixtureDir . '/missing.toml');
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
-    // ── Strictness Regressions (V4.2 deep review) ─────────────────────
+    // ── Strictness Regressions (V4.2 deep review) ────────────────────────
 
     /**
      * @return iterable<string, array{string}>

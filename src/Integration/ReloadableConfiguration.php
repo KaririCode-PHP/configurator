@@ -11,25 +11,34 @@ use KaririCode\Configurator\Event\ConfigReloaded;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
 /**
- * Decorator that monitors config files and rebuilds on change.
+ * Rebuilds the configuration of a long-running process (Swoole,
+ * RoadRunner, ReactPHP, FrankenPHP workers) when a watched file changes,
+ * so a configuration edit does not need a restart.
  *
- * Designed for long-running processes (Swoole, RoadRunner, ReactPHP)
- * where restarting the process to reload configuration is undesirable.
+ * It polls filemtime() (portable across Linux, macOS and containers,
+ * unlike inotify) at most once per interval, from checkAndReload() or
+ * from any read. A reload builds the new configuration completely before
+ * swapping it in, so a read sees the old or the new one, never a mix; a
+ * build that fails leaves the old configuration in place.
  *
- * Uses filemtime() polling (not inotify) for portability across
- * Linux, macOS, and containerized environments. The polling interval
- * is configurable; default 5 seconds balances responsiveness with
- * filesystem overhead.
+ * Preconditions: the builder builds a sealed configuration every time;
+ * the watched files are the ones the builder reads.
  *
- * Thread-safety: the reload operation is atomic — a new Configuration
- * instance is built completely before replacing the reference. Readers
- * during reload see the previous (consistent) configuration.
+ * Thread-safety: one instance per worker; a reload swaps the inner
+ * configuration between two reads.
  *
- * Ref: Spring Cloud Config refresh scope; Kubernetes ConfigMap reload;
- *      ARFA 1.3 P5 (observability via EventDispatcherBridge).
+ * Side effects: a read may stat the watched files, rebuild the
+ * configuration and dispatch ConfigReloaded.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Example:
+ *
+ *     $config = new ReloadableConfiguration($files, $builder, checkIntervalSec: 2.0, dispatcher: $dispatcher);
+ *     $timeout = $config->getInt('http.timeout'); // reloads first when a file changed
+ *
+ * References: ADR-006. ARFA 1.3 P3: adaptive configuration for
+ * long-running workers; P5: ConfigReloaded.
+ *
+ * @since 4.2.0
  */
 final class ReloadableConfiguration implements Configurator
 {
@@ -56,7 +65,7 @@ final class ReloadableConfiguration implements Configurator
         $this->captureFileMtimes();
     }
 
-    // ── Hot Reload ────────────────────────────────────────────────────
+    // ── Hot Reload ───────────────────────────────────────────────────────
 
     /**
      * Checks for file changes and reloads if needed.
@@ -92,7 +101,7 @@ final class ReloadableConfiguration implements Configurator
         $this->reload($this->watchFiles);
     }
 
-    // ── Configurator Contract (delegated) ─────────────────────────────
+    // ── Configurator Contract (delegated) ────────────────────────────────
 
     #[\Override]
     public function get(string $path, mixed $default = null): mixed
@@ -158,7 +167,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->all();
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * @param list<string> $changedFiles

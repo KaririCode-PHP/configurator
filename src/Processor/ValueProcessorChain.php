@@ -7,18 +7,28 @@ namespace KaririCode\Configurator\Processor;
 use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
- * Applies a chain of ValueProcessors to configuration data recursively.
+ * Runs a list of value processors over every scalar of a configuration
+ * tree: each processor that supports the current value transforms it and
+ * hands the result to the next, so interpolation can feed a cast
+ * (`${PORT}` becomes `int:8080`, then 8080).
  *
- * Traverses the entire configuration tree, applying each processor
- * to every scalar value. Processors are evaluated in registration order;
- * the first processor whose supports() returns true handles the value,
- * then the result is passed to subsequent processors.
+ * Preconditions: processors run in the order they were added; arrays are
+ * walked, never passed to a processor.
  *
- * Design: Chain of Responsibility (GoF) with recursive tree traversal.
- * The chain terminates when no processor supports the current value.
+ * Thread-safety: mutable through add(); add every processor before the
+ * chain runs.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Side effects: those of its processors.
+ *
+ * Example:
+ *
+ *     $chain = new ValueProcessorChain()->add(new EnvironmentProcessor())->add(new TypeCastProcessor());
+ *     $data = $chain->processArray(['port' => '${PORT:int:8080}']);
+ *
+ * References: ADR-005; GoF Chain of Responsibility. ARFA 1.3 P2:
+ * composed transformations.
+ *
+ * @since 4.2.0
  */
 final class ValueProcessorChain
 {
@@ -73,7 +83,7 @@ final class ValueProcessorChain
         return $this->processors === [];
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * @param array<array-key, mixed> $data

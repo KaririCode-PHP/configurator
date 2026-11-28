@@ -7,21 +7,30 @@ namespace KaririCode\Configurator\Environment;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
- * Resolves environment variables from PHP runtime sources.
+ * Resolves environment variables from the process: `$_ENV`, then
+ * `$_SERVER`, then getenv(), the order phpdotenv and Symfony Dotenv use,
+ * so values set by Docker, Kubernetes, systemd or a .env loader are all
+ * found.
  *
- * Lookup order: $_ENV → $_SERVER → getenv(). This matches the
- * resolution order used by phpdotenv and Symfony DotEnv, ensuring
- * compatibility with both .env file loaders and system-level
- * environment variables set by Docker, Kubernetes, or systemd.
+ * It is the default resolver of `${VAR}` interpolation. Entries that are
+ * not scalars (`$_SERVER['argv']`) are not environment values and
+ * resolve to null.
  *
- * This is the default resolver when no Dotenv integration is
- * configured. For production, prefer DotenvEnvironmentResolver
- * which provides .env file loading with system fallback.
+ * Preconditions: none.
  *
- * For testing, use InMemoryEnvironmentResolver instead.
+ * Thread-safety: immutable; reads the process environment on every call
+ * and caches nothing.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Side effects: none; it never writes the environment.
+ *
+ * Example:
+ *
+ *     $home = new SystemEnvironmentResolver()->get('HOME');
+ *
+ * References: ADR-004; kariricode/contract
+ * `Environment\EnvironmentResolver`.
+ *
+ * @since 4.2.0
  */
 final readonly class SystemEnvironmentResolver implements EnvironmentResolver
 {

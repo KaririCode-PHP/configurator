@@ -5,15 +5,25 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Loader;
 
 /**
- * How a key path came to exist in a TOML document. TOML's rules on
- * redefinition depend on it: values are never extended, a [header]
- * cannot redeclare a table, and dotted keys cannot reopen a table
- * declared by a header.
+ * Records how a key path came to exist in a TOML document, because
+ * TOML's redefinition rules depend on it: values are never extended, a
+ * [header] cannot redeclare a table, and dotted keys cannot reopen a
+ * table a header declared.
+ *
+ * Preconditions: used only by TomlDocument.
+ *
+ * Thread-safety: an enum; immutable.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $reopened = $origin === TomlDefinition::HeaderTable;
+ *
+ * References: TOML 1.0 (Keys, Tables), ADR-008.
  *
  * @internal Parser state of TomlLoader.
- *
- * @package KaririCode\Configurator
- * @since   4.2.0 ARFA 1.3
+ * @since 4.2.0
  */
 enum TomlDefinition
 {

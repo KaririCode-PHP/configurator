@@ -5,14 +5,25 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Event;
 
 /**
- * Emitted when a ReloadableConfiguration detects file changes
- * and successfully rebuilds the configuration.
+ * Reports, through PSR-14, that ReloadableConfiguration rebuilt itself
+ * after a watched file changed, so listeners can drop caches, reconnect
+ * or refresh runtime state without restarting the process.
  *
- * Listeners can use this to invalidate caches, reconnect databases,
- * or update runtime state without restarting the process.
+ * Preconditions: `$changedFiles` lists the watched files that changed
+ * (every watched file after forceReload()); `$reloadTimeMs` is the
+ * rebuild time in milliseconds.
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ * Thread-safety: immutable; safe to share between fibers and requests.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     $listeners->listen(ConfigReloaded::class, static fn(ConfigReloaded $event) => $cache->clear());
+ *
+ * References: ADR-006; PSR-14. ARFA 1.3 P5: observable lifecycle.
+ *
+ * @since 4.2.0
  */
 final readonly class ConfigReloaded
 {

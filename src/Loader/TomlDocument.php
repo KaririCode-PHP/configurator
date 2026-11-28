@@ -7,15 +7,30 @@ namespace KaririCode\Configurator\Loader;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * The tables and keys of one TOML document, or of one inline table,
- * built under the definition rules of TOML 1.0: a key is defined once,
+ * Builds the tables and keys of one TOML document, or of one inline
+ * table, under the definition rules of TOML 1.0: a key is defined once,
  * a value is never extended, a [header] does not redeclare a table, and
  * dotted keys do not reopen a table that a header declared.
  *
- * @internal Parser state of TomlLoader: one instance per document or inline table.
+ * Preconditions: one instance per document or inline table; keys and
+ * tables arrive as parsed segment lists. Rule violations raise
+ * LoaderException::invalidSyntax(), which TomlLoader reports with the
+ * line.
  *
- * @package KaririCode\Configurator
- * @since   4.2.0
+ * Thread-safety: mutable while one parse runs; never shared.
+ *
+ * Side effects: none outside the instance.
+ *
+ * Example:
+ *
+ *     $document = new TomlDocument();
+ *     $document->declareTable(['database']);
+ *     $document->assign(['database'], ['port'], 5432); // ['database' => ['port' => 5432]]
+ *
+ * References: TOML 1.0 (Keys, Tables, Inline Tables), ADR-008.
+ *
+ * @internal Parser state of TomlLoader.
+ * @since 4.2.0
  */
 final class TomlDocument
 {
@@ -39,7 +54,7 @@ final class TomlDocument
         $last = count($table) - 1;
 
         foreach ($table as $depth => $segment) {
-            $id = $this->pathId(array_slice($table, 0, $depth + 1));
+            $id = $this->pathId(array_slice(array: $table, offset: 0, length: $depth + 1));
             $origin = $this->defined[$id] ?? null;
 
             if ($depth === $last) {
@@ -83,7 +98,7 @@ final class TomlDocument
         $cursor = &$root;
 
         foreach ($path as $depth => $segment) {
-            $this->claimParent(array_slice($path, 0, $depth + 1), $segment, dotted: $depth >= count($table));
+            $this->claimParent(prefix: array_slice(array: $path, offset: 0, length: $depth + 1), segment: $segment, dotted: $depth >= count($table));
 
             if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
                 $cursor[$segment] = [];

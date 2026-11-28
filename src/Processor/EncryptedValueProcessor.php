@@ -8,27 +8,34 @@ use KaririCode\Configurator\Exception\ProcessorException;
 use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
- * Decrypts values wrapped in the ENC() envelope during config loading.
+ * Decrypts configuration values written as `ENC(base64)` when the
+ * configuration is sealed, with AES-256-GCM: authenticated encryption,
+ * so a tampered or truncated value fails instead of decrypting to
+ * garbage.
  *
- * Syntax: "ENC(base64-encoded-ciphertext)"
+ * The payload is nonce (12 bytes), ciphertext and tag (16 bytes),
+ * base64-encoded inside the envelope; encrypt() produces it for tools
+ * and deployment scripts. The key is 32 raw bytes or 64 hex characters
+ * and comes from the environment or a secrets manager, never from a
+ * configuration file. Key rotation is outside this processor.
  *
- * Uses AES-256-GCM by default (authenticated encryption). The encryption
- * key must be provided at construction time via a 256-bit (32-byte) key
- * or a hex-encoded key string.
+ * Preconditions: ext-openssl is loaded; the key is the one the values
+ * were encrypted with.
  *
- * Ciphertext format: nonce (12 bytes) || ciphertext || tag (16 bytes),
- * all base64-encoded inside the ENC() envelope.
+ * Thread-safety: immutable; holds the key for its lifetime.
  *
- * Security considerations:
- *   - Key should come from environment variable or secrets manager, never hardcoded
- *   - GCM tag ensures integrity — tampered ciphertext throws
- *   - No key rotation support in this processor; use a secrets manager for rotation
+ * Side effects: none; decryption happens in memory and failures name the
+ * cause, never the value or the key.
  *
- * Ref: NIST SP 800-38D (GCM); Hashicorp Vault transit engine model;
- *      KaririCode\Dotenv V4.x AES-256-GCM convention.
+ * Example:
  *
- * @package KaririCode\Configurator
- * @since   4.1.0 ARFA 1.3
+ *     $processor = new EncryptedValueProcessor($_SERVER['CONFIG_KEY']);
+ *     $password = $processor->process(EncryptedValueProcessor::encrypt('s3cr3t', $_SERVER['CONFIG_KEY']));
+ *
+ * References: NIST SP 800-38D (GCM), ADR-005, ADR-011; OWASP ASVS 5.0
+ * V11 (cryptography), V13 (configuration secrets).
+ *
+ * @since 4.2.0
  */
 final readonly class EncryptedValueProcessor implements ValueProcessor
 {
@@ -60,7 +67,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      */
     private static function resolveKey(string $key): string
     {
-        if (preg_match('/^[0-9a-fA-F]{64}$/', $key) === 1) {
+        if (preg_match('/^[0-9a-fA-F]{64}\z/', $key) === 1) {
             $decoded = hex2bin($key);
 
             // hex2bin returns false on failure; guaranteed valid here
@@ -91,9 +98,9 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         }
 
         $encoded = substr(
-            $value,
-            strlen(self::ENVELOPE_PREFIX),
-            -strlen(self::ENVELOPE_SUFFIX),
+            string: $value,
+            offset: strlen(self::ENVELOPE_PREFIX),
+            length: -strlen(self::ENVELOPE_SUFFIX),
         );
 
         $raw = base64_decode($encoded, true);
@@ -111,17 +118,17 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
             throw ProcessorException::decryptionFailed('ciphertext too short');
         }
 
-        $nonce = substr($raw, 0, self::NONCE_LENGTH);
+        $nonce = substr(string: $raw, offset: 0, length: self::NONCE_LENGTH);
         $tag = substr($raw, -self::TAG_LENGTH);
-        $ciphertext = substr($raw, self::NONCE_LENGTH, -self::TAG_LENGTH);
+        $ciphertext = substr(string: $raw, offset: self::NONCE_LENGTH, length: -self::TAG_LENGTH);
 
         $plaintext = openssl_decrypt(
-            $ciphertext,
-            self::CIPHER,
-            $this->key,
-            OPENSSL_RAW_DATA,
-            $nonce,
-            $tag,
+            data: $ciphertext,
+            cipher_algo: self::CIPHER,
+            passphrase: $this->key,
+            options: OPENSSL_RAW_DATA,
+            iv: $nonce,
+            tag: $tag,
         );
 
         if ($plaintext === false) {
@@ -133,7 +140,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         return $plaintext;
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
     /**
      * Encrypts a plaintext value into the ENC() envelope format.
@@ -152,14 +159,14 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         $tag = '';
 
         $ciphertext = openssl_encrypt(
-            $plaintext,
-            self::CIPHER,
-            $resolvedKey,
-            OPENSSL_RAW_DATA,
-            $nonce,
-            $tag,
-            '',
-            self::TAG_LENGTH,
+            data: $plaintext,
+            cipher_algo: self::CIPHER,
+            passphrase: $resolvedKey,
+            options: OPENSSL_RAW_DATA,
+            iv: $nonce,
+            tag: $tag,
+            aad: '',
+            tag_length: self::TAG_LENGTH,
         );
 
         if ($ciphertext === false) {

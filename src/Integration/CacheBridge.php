@@ -10,28 +10,36 @@ use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use Psr\SimpleCache\CacheInterface;
 
 /**
- * Wraps a Configuration with PSR-16 caching.
+ * Serves a configuration from a PSR-16 cache, so a worker that boots
+ * often skips file I/O and parsing: the first load() reads and merges
+ * the files and stores the raw tree; later calls rebuild the
+ * configuration from the cached tree.
  *
- * On first access, loads and merges the raw file data and stores
- * it in the cache. On subsequent accesses, restores the data from
- * cache bypassing file I/O and YAML parsing entirely.
+ * The key derives from the ordered file list and the merge strategy, so
+ * a different order, file set or strategy gets its own entry. File
+ * contents are not part of the key: edits show after the TTL expires or
+ * after invalidate(). The bridge does not run the value processors, so
+ * `${VAR}`, cast prefixes and `ENC(...)` stay as written and no
+ * decrypted value ever reaches the cache; use ConfigurationBuilder when
+ * they are needed.
  *
- * The cache key is derived from the ordered file list and the merge
- * strategy: later files override earlier ones and the strategy shapes
- * the result, so a different order, a different file set, or a
- * different strategy each get their own entry. File contents are not
- * part of the key — edits are picked up when the TTL expires or after
- * invalidate().
+ * Preconditions: the files exist and are readable on a cache miss; the
+ * cache stores PHP arrays.
  *
- * Scope: this bridge does NOT run the value-processor chain, so
- * ${ENV} interpolation, type-cast prefixes, and ENC() decryption
- * are not applied here. Use ConfigurationBuilder when those are
- * needed; this bridge is for pre-resolved, cache-friendly data.
+ * Thread-safety: immutable; as safe as the cache it wraps.
  *
- * Requires: kariricode/cache (PSR-16 CacheInterface)
+ * Side effects: a miss reads the files and writes the cache entry;
+ * invalidate() deletes it.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Example:
+ *
+ *     $bridge = new CacheBridge($psr16Cache, ttl: 300);
+ *     $config = $bridge->load(['/app/config/app.php', '/app/config/app.production.php']);
+ *
+ * References: ADR-001, ADR-003; PSR-16. ARFA 1.3 P3: cheaper boots for
+ * long-running workers.
+ *
+ * @since 4.2.0
  */
 final readonly class CacheBridge
 {
@@ -63,7 +71,7 @@ final readonly class CacheBridge
         }
 
         $config = $this->buildFromFiles($files, $merge);
-        $this->cache->set($cacheKey, $config->all(), $this->ttl);
+        $this->cache->set(key: $cacheKey, value: $config->all(), ttl: $this->ttl);
 
         return $config;
     }
@@ -78,7 +86,7 @@ final readonly class CacheBridge
         $this->cache->delete($this->buildCacheKey($files, $merge));
     }
 
-    // ── Internal ──────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────
 
     /**
      * @param list<string> $files

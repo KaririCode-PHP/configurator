@@ -9,42 +9,43 @@ use KaririCode\Configurator\Exception\ConfigCode;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loads configuration from YAML files using a built-in parser.
+ * Loads YAML files with a built-in parser for the subset of YAML 1.2
+ * that configuration uses: block mappings and sequences (including
+ * sequences of mappings and sequences at the parent key's indentation),
+ * flow collections on one or several lines, plain, single- and
+ * double-quoted scalars with the YAML escape set, block scalars (| and
+ * >) with chomping and indentation indicators, multi-line plain scalars,
+ * comments, and the core schema's scalar types.
  *
- * Implements the subset of YAML 1.2 that configuration files use: block
- * mappings and sequences (including sequences of mappings and sequences
- * written at the parent key's indentation), flow collections on one or
- * several lines, plain / single-quoted / double-quoted scalars with the
- * YAML escape set, block scalars (| and >) with chomping (-, +) and
- * indentation indicators, multi-line plain scalars, comments, and
- * scalar type resolution (null, bool, int in four radixes, float).
+ * Parsing runs in two phases. The lexical phase rewrites block scalars
+ * and multi-line flow collections as single lines before blank lines and
+ * comments go, so their content is never mistaken for structure; the
+ * structural phase builds mappings and sequences from indentation and
+ * rejects any line it cannot place (CFG_2820). Anchors, aliases, merge
+ * keys, type tags, tab indentation and quoted scalars across lines fail
+ * with CFG_2822 instead of being misread (ADR-002).
  *
- * Parsing runs in two phases. The lexical phase consumes block scalars
- * and multi-line flow collections from the raw text and rewrites each
- * as a single-line equivalent before blank lines and comments are
- * removed, so that their content can never be mistaken for structure.
- * The structural phase then builds mappings and sequences from
- * indentation and rejects any line it cannot place.
+ * Preconditions: the file is UTF-8 text.
  *
- * Unsupported features fail loudly with LoaderException (code
- * CFG_2822) instead of being silently misparsed:
- *   - Anchors (&name), aliases (*name), merge keys (<<:)
- *   - Type tags (!!str, !!binary, ...)
- *   - Tab indentation
- *   - Quoted scalars spanning several lines
- * Structurally invalid input fails with LoaderException (code CFG_2820).
+ * Thread-safety: stateless; one instance serves every caller.
  *
- * Zero external dependencies — no Symfony/Yaml required (ADR-002).
+ * Side effects: load() reads the file.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Example:
+ *
+ *     $data = new YamlLoader()->load('/app/config/logging.yaml');
+ *
+ * References: YAML 1.2.2, ADR-002, ADR-011. ARFA 1.3 P4: one format per
+ * loader, no dependency.
+ *
+ * @since 4.2.0
  */
 final readonly class YamlLoader implements Loader
 {
     use Utf8Encoding;
 
     /** Block scalar header: style, then chomping/indentation indicators in either order. */
-    private const string BLOCK_HEADER = '/^([|>])(?:([+-])([1-9])?|([1-9])([+-])?)?(?:[ \t]+#.*)?$/';
+    private const string BLOCK_HEADER = '/^([|>])(?:([+-])([1-9])?|([1-9])([+-])?)?(?:[ \t]+#.*)?\z/';
 
     /** Byte that replaces quoted spans during position-preserving scans. */
     private const string MASK = "\x00";
@@ -99,7 +100,7 @@ final readonly class YamlLoader implements Loader
         return $extension === 'yaml' || $extension === 'yml';
     }
 
-    // ── Lexical Phase ─────────────────────────────────────────────────
+    // ── Lexical Phase ────────────────────────────────────────────────────
 
     /**
      * @return array<array-key, mixed>
@@ -134,7 +135,7 @@ final readonly class YamlLoader implements Loader
             $yaml = substr($yaml, 3);
         }
 
-        $raw = explode("\n", str_replace(["\r\n", "\r"], "\n", $yaml));
+        $raw = explode("\n", str_replace(search: ["\r\n", "\r"], replace: "\n", subject: $yaml));
 
         // A final newline terminates the last line; it does not open one.
         if (end($raw) === '') {
@@ -155,15 +156,15 @@ final readonly class YamlLoader implements Loader
 
             $node = $this->splitNode($line);
 
-            if (preg_match(self::BLOCK_HEADER, $node['value'], $header) === 1) {
-                [$scalar, $index] = $this->consumeBlockScalar($raw, $index, $node['column'], $header);
+            if (preg_match(pattern: self::BLOCK_HEADER, subject: $node['value'], matches: $header) === 1) {
+                [$scalar, $index] = $this->consumeBlockScalar(raw: $raw, index: $index, parentColumn: $node['column'], header: $header);
                 $lines[] = $node['prefix'] . $this->quote($scalar);
 
                 continue;
             }
 
             if ($this->flowDepth($this->stripInlineComment($node['value'])) > 0) {
-                [$line, $index] = $this->consumeFlowCollection($raw, $index, $line);
+                [$line, $index] = $this->consumeFlowCollection(raw: $raw, index: $index, line: $line);
             }
 
             if ($this->hasUnterminatedQuote($line)) {
@@ -214,7 +215,7 @@ final readonly class YamlLoader implements Loader
     private function unsupportedFeature(string $line): ?string
     {
         $stripped = ltrim($line);
-        $indentation = substr($line, 0, strlen($line) - strlen($stripped));
+        $indentation = substr(string: $line, offset: 0, length: strlen($line) - strlen($stripped));
 
         return match (true) {
             $this->hasAnchor($stripped) => 'YAML anchors (&name) are not supported',
@@ -232,7 +233,7 @@ final readonly class YamlLoader implements Loader
      */
     private function hasAnchor(string $stripped): bool
     {
-        return preg_match('/&\w+\s*$/', $stripped) === 1
+        return preg_match('/&\w+\s*\z/', $stripped) === 1
             || preg_match('/:\s+&\w+/', $stripped) === 1
             || preg_match('/^-\s+&\w+/', $stripped) === 1;
     }
@@ -271,13 +272,13 @@ final readonly class YamlLoader implements Loader
         $colon = $this->findKeyColon($rest);
 
         if ($colon === false) {
-            return ['prefix' => substr($line, 0, $position), 'value' => $rest, 'column' => $column];
+            return ['prefix' => substr(string: $line, offset: 0, length: $position), 'value' => $rest, 'column' => $column];
         }
 
         $valueStart = $this->skipSpaces($line, $position + $colon + 1);
 
         return [
-            'prefix' => rtrim(substr($line, 0, $valueStart)) . ' ',
+            'prefix' => rtrim(substr(string: $line, offset: 0, length: $valueStart)) . ' ',
             'value' => substr($line, $valueStart),
             'column' => $position,
         ];
@@ -460,7 +461,7 @@ final readonly class YamlLoader implements Loader
         ]) . '"';
     }
 
-    // ── Structural Phase ──────────────────────────────────────────────
+    // ── Structural Phase ─────────────────────────────────────────────────
 
     /**
      * Parses lines that form one complete block as a mapping or a
@@ -481,8 +482,8 @@ final readonly class YamlLoader implements Loader
         }
 
         return $this->isSequenceItem(ltrim($lines[0]))
-            ? $this->parseSequence($lines, 0, count($lines), $indent)
-            : $this->parseMapping($lines, 0, count($lines), $indent);
+            ? $this->parseSequence(lines: $lines, start: 0, end: count($lines), indent: $indent)
+            : $this->parseMapping(lines: $lines, start: 0, end: count($lines), indent: $indent);
     }
 
     /**
@@ -506,18 +507,18 @@ final readonly class YamlLoader implements Loader
                 throw LoaderException::invalidSyntax(sprintf("expected 'key: value' at indentation %d, got %s", $indent, $this->describe($stripped)));
             }
 
-            $key = $this->parseKey(substr($stripped, 0, $colon));
+            $key = $this->parseKey(substr(string: $stripped, offset: 0, length: $colon));
             $value = $this->stripInlineComment(trim(substr($stripped, $colon + 1)));
             ++$index;
 
             if ($value === '') {
-                [$result[$key], $index] = $this->parseNestedValue($lines, $index, $end, $indent);
+                [$result[$key], $index] = $this->parseNestedValue(lines: $lines, index: $index, end: $end, keyIndent: $indent);
 
                 continue;
             }
 
-            $continuationEnd = $this->findBlockEnd($lines, $index, $end, $indent + 1);
-            $result[$key] = $this->parseInlineValue($value, $this->slice($lines, $index, $continuationEnd));
+            $continuationEnd = $this->findBlockEnd(lines: $lines, from: $index, end: $end, minIndent: $indent + 1);
+            $result[$key] = $this->parseInlineValue($value, $this->slice(lines: $lines, from: $index, to: $continuationEnd));
             $index = $continuationEnd;
         }
 
@@ -541,16 +542,16 @@ final readonly class YamlLoader implements Loader
         $childIndent = $this->indentLevel($lines[$index]);
 
         if ($childIndent > $keyIndent) {
-            $blockEnd = $this->findBlockEnd($lines, $index, $end, $keyIndent + 1);
-            $block = $this->slice($lines, $index, $blockEnd);
+            $blockEnd = $this->findBlockEnd(lines: $lines, from: $index, end: $end, minIndent: $keyIndent + 1);
+            $block = $this->slice(lines: $lines, from: $index, to: $blockEnd);
 
             return [$block === [] ? null : $this->parseBlock($block, $childIndent), $blockEnd];
         }
 
         if ($childIndent === $keyIndent && $this->isSequenceItem(ltrim($lines[$index]))) {
-            $blockEnd = $this->findSequenceEnd($lines, $index, $end, $keyIndent);
+            $blockEnd = $this->findSequenceEnd(lines: $lines, from: $index, end: $end, indent: $keyIndent);
 
-            return [$this->parseSequence($lines, $index, $blockEnd, $keyIndent), $blockEnd];
+            return [$this->parseSequence(lines: $lines, start: $index, end: $blockEnd, indent: $keyIndent), $blockEnd];
         }
 
         return [null, $index];
@@ -575,8 +576,8 @@ final readonly class YamlLoader implements Loader
                 throw LoaderException::invalidSyntax(sprintf("expected a sequence item '- ' at indentation %d, got %s", $indent, $this->describe($line)));
             }
 
-            $itemEnd = $this->findBlockEnd($lines, $index + 1, $end, $indent + 1);
-            $result[] = $this->parseSequenceItem($line, $this->slice($lines, $index + 1, $itemEnd));
+            $itemEnd = $this->findBlockEnd(lines: $lines, from: $index + 1, end: $end, minIndent: $indent + 1);
+            $result[] = $this->parseSequenceItem($line, $this->slice(lines: $lines, from: $index + 1, to: $itemEnd));
             $index = $itemEnd;
         }
 
@@ -663,7 +664,7 @@ final readonly class YamlLoader implements Loader
         return implode(' ', $parts);
     }
 
-    // ── Scalar Parsing ────────────────────────────────────────────────
+    // ── Scalar Parsing ───────────────────────────────────────────────────
 
     private function parseScalar(string $value): string|int|float|bool|null
     {
@@ -698,27 +699,27 @@ final readonly class YamlLoader implements Loader
     {
         // intval(.., 0) does not recognize 0b/0o prefixes, so each radix is
         // handled explicitly. YAML 1.2 treats a leading zero as decimal.
-        if (preg_match('/^(-?)0b([01]+)$/i', $value, $matches) === 1) {
+        if (preg_match(pattern: '/^(-?)0b([01]+)\z/i', subject: $value, matches: $matches) === 1) {
             $magnitude = intval($matches[2], 2);
 
             return $matches[1] === '-' ? -$magnitude : $magnitude;
         }
 
-        if (preg_match('/^(-?)0o([0-7]+)$/i', $value, $matches) === 1) {
+        if (preg_match(pattern: '/^(-?)0o([0-7]+)\z/i', subject: $value, matches: $matches) === 1) {
             $magnitude = intval($matches[2], 8);
 
             return $matches[1] === '-' ? -$magnitude : $magnitude;
         }
 
-        if (preg_match('/^-?0x[0-9a-fA-F]+$/', $value) === 1) {
+        if (preg_match('/^-?0x[0-9a-fA-F]+\z/', $value) === 1) {
             return intval($value, 16);
         }
 
-        if (preg_match('/^-?[0-9]+$/', $value) === 1) {
+        if (preg_match('/^-?[0-9]+\z/', $value) === 1) {
             return (int) $value;
         }
 
-        if (preg_match('/^-?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?$/', $value) === 1) {
+        if (preg_match('/^-?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?\z/', $value) === 1) {
             return (float) $value;
         }
 
@@ -741,11 +742,11 @@ final readonly class YamlLoader implements Loader
 
         if (strlen($value) >= 2) {
             if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
-                return $this->unescapeDoubleQuoted(substr($value, 1, -1));
+                return $this->unescapeDoubleQuoted(substr(string: $value, offset: 1, length: -1));
             }
 
             if (str_starts_with($value, "'") && str_ends_with($value, "'")) {
-                return str_replace("''", "'", substr($value, 1, -1));
+                return str_replace(search: "''", replace: "'", subject: substr(string: $value, offset: 1, length: -1));
             }
         }
 
@@ -785,9 +786,9 @@ final readonly class YamlLoader implements Loader
                 default => throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s'", $escape)),
             };
 
-            $hex = substr($value, $i + 1, $width);
+            $hex = substr(string: $value, offset: $i + 1, length: $width);
 
-            if (preg_match('/^[0-9a-fA-F]{' . $width . '}$/', $hex) !== 1) {
+            if (preg_match('/^[0-9a-fA-F]{' . $width . '}\z/', $hex) !== 1) {
                 throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s': expected %d hexadecimal digits", $escape, $width));
             }
 
@@ -798,7 +799,7 @@ final readonly class YamlLoader implements Loader
         return $result;
     }
 
-    // ── Flow Collections ──────────────────────────────────────────────
+    // ── Flow Collections ─────────────────────────────────────────────────
 
     /**
      * @return list<string|int|float|bool|array<array-key, mixed>|null>
@@ -809,7 +810,7 @@ final readonly class YamlLoader implements Loader
 
         return array_map(
             fn(string $item): string|int|float|bool|array|null => $this->parseInlineValue($item),
-            $this->splitFlowItems(substr($value, 1, -1)),
+            $this->splitFlowItems(substr(string: $value, offset: 1, length: -1)),
         );
     }
 
@@ -821,7 +822,7 @@ final readonly class YamlLoader implements Loader
         $this->assertFlowClosesAtEnd($value);
         $result = [];
 
-        foreach ($this->splitFlowItems(substr($value, 1, -1)) as $item) {
+        foreach ($this->splitFlowItems(substr(string: $value, offset: 1, length: -1)) as $item) {
             $colon = $this->findKeyColon($item);
 
             if ($colon === false) {
@@ -830,7 +831,7 @@ final readonly class YamlLoader implements Loader
                 continue;
             }
 
-            $result[$this->parseKey(substr($item, 0, $colon))] = $this->parseInlineValue(trim(substr($item, $colon + 1)));
+            $result[$this->parseKey(substr(string: $item, offset: 0, length: $colon))] = $this->parseInlineValue(trim(substr($item, $colon + 1)));
         }
 
         return $result;
@@ -884,7 +885,7 @@ final readonly class YamlLoader implements Loader
             } elseif ($char === ']' || $char === '}') {
                 --$depth;
             } elseif ($char === ',' && $depth === 0) {
-                $item = trim(substr($input, $start, $i - $start));
+                $item = trim(substr(string: $input, offset: $start, length: $i - $start));
 
                 if ($item !== '') {
                     $items[] = $item;
@@ -897,7 +898,7 @@ final readonly class YamlLoader implements Loader
         return $items;
     }
 
-    // ── Utility ───────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────
 
     /**
      * Names a line for an error message without repeating its value: the
@@ -910,7 +911,7 @@ final readonly class YamlLoader implements Loader
 
         return match (true) {
             $this->isSequenceItem($stripped) => 'a sequence item',
-            $colon !== false => sprintf("the key '%s'", $this->parseKey(substr($stripped, 0, $colon))),
+            $colon !== false => sprintf("the key '%s'", $this->parseKey(substr(string: $stripped, offset: 0, length: $colon))),
             default => 'a line that is neither a key nor a sequence item',
         };
     }
@@ -935,7 +936,7 @@ final readonly class YamlLoader implements Loader
             if (($char === '"' || $char === "'") && $canOpen) {
                 $close = $this->closingQuote($text, $i);
                 $last = $close === -1 ? $length - 1 : $close;
-                $masked = substr_replace($masked, str_repeat(self::MASK, $last - $i + 1), $i, $last - $i + 1);
+                $masked = substr_replace(string: $masked, replace: str_repeat(self::MASK, $last - $i + 1), offset: $i, length: $last - $i + 1);
                 $i = $last;
                 $canOpen = false;
 
@@ -1078,7 +1079,7 @@ final readonly class YamlLoader implements Loader
 
         for ($i = 0; $i < $length; ++$i) {
             if ($masked[$i] === '#' && ($i === 0 || $masked[$i - 1] === ' ' || $masked[$i - 1] === "\t")) {
-                return rtrim(substr($value, 0, $i));
+                return rtrim(substr(string: $value, offset: 0, length: $i));
             }
         }
 
@@ -1159,6 +1160,6 @@ final readonly class YamlLoader implements Loader
      */
     private function slice(array $lines, int $from, int $to): array
     {
-        return array_slice($lines, $from, $to - $from);
+        return array_slice(array: $lines, offset: $from, length: $to - $from);
     }
 }

@@ -7,15 +7,29 @@ namespace KaririCode\Configurator\Environment;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
- * Chains multiple resolvers in priority order (first match wins).
+ * Asks several environment resolvers in priority order and answers with
+ * the first value found, so sources compose without code: a .env store
+ * before the process environment, test overrides before both, a vault
+ * before everything.
  *
- * Enables composite resolution patterns without code duplication:
- *   - Dotenv loaded vars → system fallback
- *   - In-memory overrides → Dotenv → system
- *   - Vault → Dotenv → system
+ * Preconditions: resolvers are passed in priority order; an empty list
+ * resolves nothing.
  *
- * @package KaririCode\Configurator
- * @since   4.2.0 ARFA 1.3
+ * Thread-safety: immutable; as safe as the resolvers it holds.
+ *
+ * Side effects: none of its own; each get() asks the resolvers in turn.
+ *
+ * Example:
+ *
+ *     $resolver = new CompositeEnvironmentResolver(
+ *         new InMemoryEnvironmentResolver(['APP_ENV' => 'test']),
+ *         new SystemEnvironmentResolver(),
+ *     );
+ *
+ * References: ADR-004, ADR-010; kariricode/contract
+ * `Environment\EnvironmentResolver`. ARFA 1.3 P2: composition.
+ *
+ * @since 4.2.0
  */
 final readonly class CompositeEnvironmentResolver implements EnvironmentResolver
 {

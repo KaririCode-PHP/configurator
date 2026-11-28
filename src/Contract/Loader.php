@@ -7,15 +7,27 @@ namespace KaririCode\Configurator\Contract;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Configuration file loader contract.
+ * Parses one configuration file format into a nested array;
+ * Configuration picks the loader by file extension.
  *
- * Each implementation handles a single file format (PHP, JSON, YAML,
- * INI, TOML).
- * Loaders are stateless and thread-safe — they parse the file and
- * return a normalized associative array.
+ * Preconditions: load() receives a path the caller chose to load;
+ * supports() answers for a lower-case extension without the dot. A
+ * loader reports every failure as LoaderException and never repeats file
+ * content in a message.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Thread-safety: implementations are stateless; one instance serves
+ * every file.
+ *
+ * Side effects: load() reads the file; PhpLoader also executes it.
+ *
+ * Example:
+ *
+ *     $config->registerLoader(new NeonLoader(), 'neon');
+ *
+ * References: ADR-002, ADR-008, ADR-011. ARFA 1.3 P4: one format per
+ * implementation.
+ *
+ * @since 4.2.0
  */
 interface Loader
 {
