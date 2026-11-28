@@ -61,4 +61,28 @@ final class JsonLoaderTest extends TestCase
 
         return $data;
     }
+
+    public function testADirectoryIsNotAConfigurationFile(): void
+    {
+        $this->expectException(LoaderException::class);
+        $this->expectExceptionCode(2811);
+
+        $this->loader->load($this->fixturesPath);
+    }
+
+    public function testDocumentsDecodeUpToTheDepthLimit(): void
+    {
+        $path = sys_get_temp_dir() . '/kariricode-config-depth-' . bin2hex(random_bytes(4)) . '.json';
+
+        try {
+            file_put_contents($path, '{"a": ' . str_repeat('[', 510) . str_repeat(']', 510) . '}');
+            self::assertArrayHasKey('a', $this->loader->load($path));
+
+            file_put_contents($path, '{"a": ' . str_repeat('[', 511) . str_repeat(']', 511) . '}');
+            $this->expectException(LoaderException::class);
+            $this->loader->load($path);
+        } finally {
+            unlink($path);
+        }
+    }
 }

@@ -181,4 +181,21 @@ final class EnvironmentResolverTest extends TestCase
         self::assertNull($composite->get('ANY'));
         self::assertFalse($composite->has('ANY'));
     }
+
+    public function testSystemResolverTurnsNumbersIntoStrings(): void
+    {
+        $int = 'KCODE_INT_' . bin2hex(random_bytes(4));
+        $float = 'KCODE_FLOAT_' . bin2hex(random_bytes(4));
+        $_SERVER[$int] = 42;
+        $_SERVER[$float] = 1.5;
+
+        try {
+            $resolver = new SystemEnvironmentResolver();
+
+            self::assertSame('42', $resolver->get($int));
+            self::assertSame('1.5', $resolver->get($float));
+        } finally {
+            unset($_SERVER[$int], $_SERVER[$float]);
+        }
+    }
 }

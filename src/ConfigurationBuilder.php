@@ -12,6 +12,7 @@ use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
 use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use KaririCode\Configurator\Processor\EnvironmentProcessor;
 use KaririCode\Configurator\Processor\ValueProcessorChain;
+use KaririCode\Configurator\Validator\CompositeValidator;
 use KaririCode\Configurator\Validator\SchemaValidator;
 use KaririCode\Contract\Configuration\ConfigProvider;
 use KaririCode\Contract\Configuration\ValueProcessor;
@@ -330,19 +331,24 @@ final class ConfigurationBuilder
 
     // ── Internal ─────────────────────────────────────────────────────────
 
+    /**
+     * The validator the configuration runs at seal time: the providers'
+     * schemas merged into a SchemaValidator (the application's entries win
+     * on the same path), or run next to a validator of another kind.
+     */
     private function buildValidator(): ?ConfigValidator
     {
-        if ($this->providerSchema !== [] && $this->validator === null) {
-            return new SchemaValidator($this->providerSchema);
+        if ($this->providerSchema === []) {
+            return $this->validator;
         }
 
-        if ($this->providerSchema !== [] && $this->validator instanceof SchemaValidator) {
-            return new SchemaValidator(
+        return match (true) {
+            $this->validator === null => new SchemaValidator($this->providerSchema),
+            $this->validator instanceof SchemaValidator => new SchemaValidator(
                 array_merge($this->providerSchema, $this->validator->schema()),
-            );
-        }
-
-        return $this->validator;
+            ),
+            default => new CompositeValidator(new SchemaValidator($this->providerSchema), $this->validator),
+        };
     }
 
     private function loadProviderDefaults(Configuration $config): void
@@ -414,12 +420,10 @@ final class ConfigurationBuilder
         }
     }
 
+    /** glob() returns the matches sorted by name. */
     private function loadGlob(Configuration $config, string $pattern): void
     {
-        $files = $this->globFiles($pattern);
-        sort($files);
-
-        foreach ($files as $file) {
+        foreach ($this->globFiles($pattern) as $file) {
             if (is_file($file)) {
                 $config->load($file);
             }

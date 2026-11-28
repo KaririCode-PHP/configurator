@@ -33,12 +33,12 @@ use KaririCode\Contract\Environment\EnvironmentResolver;
  */
 final readonly class CompositeEnvironmentResolver implements EnvironmentResolver
 {
-    /** @var list<EnvironmentResolver> */
+    /** @var array<array-key, EnvironmentResolver> In priority order */
     private array $resolvers;
 
     public function __construct(EnvironmentResolver ...$resolvers)
     {
-        $this->resolvers = array_values($resolvers);
+        $this->resolvers = $resolvers;
     }
 
     #[\Override]

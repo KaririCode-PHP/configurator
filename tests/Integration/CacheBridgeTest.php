@@ -12,7 +12,7 @@ use Psr\SimpleCache\CacheInterface;
 final class CacheBridgeTest extends TestCase
 {
     private string $dir;
-    private CacheInterface $cache;
+    private InMemoryCache $cache;
 
     protected function setUp(): void
     {
@@ -27,6 +27,35 @@ final class CacheBridgeTest extends TestCase
     {
         array_map('unlink', self::filesIn($this->dir . '/*'));
         rmdir($this->dir);
+    }
+
+    public function testTheKeyNamesTheStrategyAndTheOrderedFiles(): void
+    {
+        $files = [$this->dir . '/a.php', $this->dir . '/b.php'];
+        new CacheBridge($this->cache)->load($files);
+        new CacheBridge($this->cache, ttl: 60)->load($files, new ReplaceMerge());
+
+        $default = 'kariricode.config.' . hash('xxh128', \KaririCode\Configurator\MergeStrategy\RecursiveMerge::class . "\0" . implode("\0", $files));
+        $replace = 'kariricode.config.' . hash('xxh128', ReplaceMerge::class . "\0" . implode("\0", $files));
+
+        self::assertSame([$default => 3600, $replace => 60], $this->cache->ttls);
+        self::assertSame(['v' => 'b', 'db' => ['host' => 'b', 'port' => 1]], $this->cache->items[$default]);
+        self::assertSame(['v' => 'b', 'db' => ['host' => 'b']], $this->cache->items[$replace]);
+    }
+
+    public function testBuiltAndCachedConfigurationsAreSealed(): void
+    {
+        $bridge = new CacheBridge($this->cache);
+        $files = [$this->dir . '/a.php'];
+
+        foreach ([$bridge->load($files), $bridge->load($files)] as $config) {
+            try {
+                $config->merge(['late' => true]);
+                self::fail('the configuration must be sealed');
+            } catch (\KaririCode\Configurator\Exception\AccessException $exception) {
+                self::assertSame(2801, $exception->getCode());
+            }
+        }
     }
 
     public function testSecondLoadIsServedFromCache(): void
@@ -87,7 +116,10 @@ final class CacheBridgeTest extends TestCase
 final class InMemoryCache implements CacheInterface
 {
     /** @var array<string, mixed> */
-    private array $items = [];
+    public private(set) array $items = [];
+
+    /** @var array<string, int|\DateInterval|null> The TTL of each set() */
+    public private(set) array $ttls = [];
 
     public function get(string $key, mixed $default = null): mixed
     {
@@ -97,6 +129,7 @@ final class InMemoryCache implements CacheInterface
     public function set(string $key, mixed $value, int|\DateInterval|null $ttl = null): bool
     {
         $this->items[$key] = $value;
+        $this->ttls[$key] = $ttl;
 
         return true;
     }

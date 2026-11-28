@@ -131,4 +131,67 @@ final class SchemaValidatorTest extends TestCase
         $validator->validate(['a' => 'string', 'b' => 42, 'c' => true]);
         $this->addToAssertionCount(1);
     }
+
+    public function testANullableTypeIsCheckedWithoutItsMarker(): void
+    {
+        try {
+            new SchemaValidator(['app.port' => '?int'])->validate(['app' => ['port' => 'abc']]);
+            self::fail('the type is wrong');
+        } catch (ValidationException $exception) {
+            self::assertSame(["Type mismatch at 'app.port': expected int, got string."], $exception->violations);
+        }
+    }
+
+    public function testEveryViolationIsReportedAfterAnAbsentOptionalKey(): void
+    {
+        try {
+            new SchemaValidator(['app.missing' => '?string', 'app.port' => 'int'])->validate(['app' => ['port' => 'abc']]);
+            self::fail('the type is wrong');
+        } catch (ValidationException $exception) {
+            self::assertSame(["Type mismatch at 'app.port': expected int, got string."], $exception->violations);
+        }
+    }
+
+    public function testAPresentNullKeySatisfiesARequiredEntry(): void
+    {
+        new SchemaValidator(['app.name' => 'string'])->validate(['app' => ['name' => null]]);
+
+        $this->expectException(ValidationException::class);
+
+        new SchemaValidator(['app.name.first' => 'string'])->validate(['app' => ['name' => 'scalar']]);
+    }
+
+    public function testTypeAliasesAndClassNames(): void
+    {
+        new SchemaValidator([
+            'a.int' => 'integer',
+            'a.float' => 'double',
+            'a.bool' => 'boolean',
+            'a.clock' => \DateTimeInterface::class,
+        ])->validate(['a' => ['int' => 1, 'float' => 1.5, 'bool' => true, 'clock' => new \DateTimeImmutable()]]);
+
+        try {
+            new SchemaValidator(['a.clock' => \DateTimeInterface::class])->validate(['a' => ['clock' => 'yesterday']]);
+            self::fail('a string is not a DateTimeInterface');
+        } catch (ValidationException $exception) {
+            self::assertSame(["Type mismatch at 'a.clock': expected DateTimeInterface, got string."], $exception->violations);
+        }
+    }
+
+    public function testACompositeReportsEveryViolationOfEveryValidator(): void
+    {
+        $validator = new \KaririCode\Configurator\Validator\CompositeValidator(
+            new SchemaValidator(['a' => 'string', 'b' => 'string']),
+            new SchemaValidator(['c' => 'int']),
+        );
+
+        try {
+            $validator->validate([]);
+            self::fail('three keys are missing');
+        } catch (ValidationException $exception) {
+            self::assertSame(["Missing required key: 'a'.", "Missing required key: 'b'.", "Missing required key: 'c'."], $exception->violations);
+        }
+
+        $validator->validate(['a' => 'x', 'b' => 'y', 'c' => 1]);
+    }
 }

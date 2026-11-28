@@ -118,6 +118,30 @@ final class IniLoaderTest extends TestCase
         $this->load("[unterminated\nkey = value\n");
     }
 
+    public function testADirectoryIsNotAConfigurationFile(): void
+    {
+        $this->expectException(LoaderException::class);
+        $this->expectExceptionCode(2811);
+
+        $this->loader->load($this->fixtureDir);
+    }
+
+    public function testNumericKeysStayKeys(): void
+    {
+        self::assertSame([1 => 'one', 'list' => ['a' => 'x']], $this->load("1 = one\n[list]\na = x\n"));
+    }
+
+    public function testAParseErrorCarriesThePhpWarning(): void
+    {
+        try {
+            $this->load("[broken\nkey = value\n");
+            self::fail('the section header is not closed');
+        } catch (LoaderException $exception) {
+            self::assertSame(2820, $exception->getCode());
+            self::assertStringContainsString('syntax error', $exception->reason);
+        }
+    }
+
     // ── Utility ──────────────────────────────────────────────────────────
 
     /** @return array<mixed> */

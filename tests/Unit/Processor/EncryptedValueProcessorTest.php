@@ -163,4 +163,12 @@ final class EncryptedValueProcessorTest extends TestCase
 
         self::assertSame(42, $processor->process(42));
     }
+
+    public function testAKeyIsHexOnlyWhenAllOfItIs(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionCode(2840);
+
+        new EncryptedValueProcessor('Z' . str_repeat('ab', 32));
+    }
 }

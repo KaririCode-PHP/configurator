@@ -289,6 +289,51 @@ final class TomlLoaderTest extends TestCase
         $this->load("[[products]]\nname = \"x\"\n");
     }
 
+    // ── Definition rules ─────────────────────────────────────────────────
+
+    public function testAValueCannotBecomeATable(): void
+    {
+        foreach (["a = 1\na.b = 2\n", "a = 1\n[a.b]\n"] as $document) {
+            try {
+                $this->load($document);
+                self::fail('a value cannot be extended: ' . $document);
+            } catch (LoaderException $exception) {
+                self::assertStringContainsString("key 'a' is not a table", $exception->getMessage());
+            }
+        }
+    }
+
+    public function testAHeaderTableKeepsItsOriginBelowAChild(): void
+    {
+        $this->expectException(LoaderException::class);
+        $this->expectExceptionMessage("table 'a' is already defined");
+
+        $this->load("[a]\n[a.b]\n[a]\n");
+    }
+
+    public function testAParentDeclaredAfterItsChildIsAllowedOnce(): void
+    {
+        self::assertSame(['a' => ['b' => ['x' => 1], 'y' => 2]], $this->load("[a.b]\nx = 1\n[a]\ny = 2\n"));
+    }
+
+    public function testADottedKeyBelowAHeaderCreatesItsTables(): void
+    {
+        self::assertSame(['a' => ['b' => ['c' => 1], 'd' => 2]], $this->load("[a]\nb.c = 1\nd = 2\n"));
+    }
+
+    public function testQuotedKeysThatLookLikePathsAreDistinct(): void
+    {
+        self::assertSame(['ab' => 1, 'a:b' => 2, 'a' => ['b' => 3]], $this->load("\"ab\" = 1\n\"a:b\" = 2\na.b = 3\n"));
+    }
+
+    public function testADuplicateDottedKeyIsNamedInFull(): void
+    {
+        $this->expectException(LoaderException::class);
+        $this->expectExceptionMessage("duplicate key 'a.b' on line 2");
+
+        $this->load("a.b = 1\na.b = 2\n");
+    }
+
     /** @return array<mixed> */
     private function load(string $content): array
     {

@@ -242,9 +242,7 @@ final class ReloadableConfiguration implements Configurator
                 continue;
             }
 
-            $previousMtime = $this->fileMtimes[$file] ?? 0;
-
-            if ($currentMtime !== $previousMtime) {
+            if ($currentMtime !== ($this->fileMtimes[$file] ?? null)) {
                 $changed[] = $file;
             }
         }

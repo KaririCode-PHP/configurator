@@ -81,6 +81,53 @@ final class TypeCastProcessorTest extends TestCase
         $this->processor->process($value);
     }
 
+    public function testAPrefixMustHaveAName(): void
+    {
+        $this->processor->registerCaster('', static fn(string $v): string => 'cast');
+
+        self::assertFalse($this->processor->supports(':value'));
+    }
+
+    public function testBooleanWordsAreCaseInsensitiveAndEmptyIsFalse(): void
+    {
+        self::assertTrue($this->processor->process('bool:TRUE'));
+        self::assertTrue($this->processor->process('bool:On'));
+        self::assertFalse($this->processor->process('bool:'));
+    }
+
+    public function testJsonDecodesUpToItsDepthLimit(): void
+    {
+        self::assertIsArray($this->processor->process('json:' . str_repeat('[', 511) . str_repeat(']', 511)));
+
+        $this->expectException(ConfigurationException::class);
+
+        $this->processor->process('json:' . str_repeat('[', 512) . str_repeat(']', 512));
+    }
+
+    public function testFileReadsAndTrimsAReadableFile(): void
+    {
+        $path = sys_get_temp_dir() . '/kariricode-config-file-' . bin2hex(random_bytes(4));
+        file_put_contents($path, "  token-value \n");
+
+        try {
+            self::assertSame('token-value', $this->processor->process('file:' . $path));
+        } finally {
+            unlink($path);
+        }
+    }
+
+    public function testFileRejectsADirectoryAndAMissingPath(): void
+    {
+        foreach ([sys_get_temp_dir(), sys_get_temp_dir() . '/kariricode-missing-' . bin2hex(random_bytes(4))] as $path) {
+            try {
+                $this->processor->process('file:' . $path);
+                self::fail('not a readable file: ' . $path);
+            } catch (ConfigurationException $exception) {
+                self::assertSame(2831, $exception->getCode());
+            }
+        }
+    }
+
     // ── float ────────────────────────────────────────────────────────────
 
     public function testCastsToFloat(): void

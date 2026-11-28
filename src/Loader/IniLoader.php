@@ -49,8 +49,9 @@ final readonly class IniLoader implements Loader
             throw LoaderException::fileUnreadable($path);
         }
 
-        // Capture parse warnings as the failure's reason instead of
-        // suppressing them with the @ operator; any warning fails the load.
+        // Capture the parse warning as the failure's reason instead of
+        // suppressing it with the @ operator; PHP reports every syntax
+        // error as a warning and returns false.
         $warning = null;
         set_error_handler(static function (int $severity, string $message) use (&$warning): bool {
             $warning = $message;
@@ -58,13 +59,10 @@ final readonly class IniLoader implements Loader
             return true;
         });
 
-        try {
-            $parsed = parse_ini_string(ini_string: $content, process_sections: true, scanner_mode: INI_SCANNER_TYPED);
-        } finally {
-            restore_error_handler();
-        }
+        $parsed = parse_ini_string(ini_string: $content, process_sections: true, scanner_mode: INI_SCANNER_TYPED);
+        restore_error_handler();
 
-        if ($parsed === false || $warning !== null) {
+        if ($parsed === false) {
             throw LoaderException::parseError($path, $warning ?? 'malformed INI syntax');
         }
 

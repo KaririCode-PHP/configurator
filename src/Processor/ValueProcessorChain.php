@@ -50,7 +50,7 @@ final class ValueProcessorChain
      * composition: EnvironmentProcessor resolves ${VAR} → "int:8080",
      * then TypeCastProcessor converts "int:8080" → 8080.
      */
-    public function processValue(mixed $value): mixed
+    public function processValue(#[\SensitiveParameter] mixed $value): mixed
     {
         foreach ($this->processors as $processor) {
             if ($processor->supports($value)) {
@@ -71,10 +71,6 @@ final class ValueProcessorChain
      */
     public function processArray(array $data): array
     {
-        if ($this->processors === []) {
-            return $data;
-        }
-
         return $this->walk($data);
     }
 

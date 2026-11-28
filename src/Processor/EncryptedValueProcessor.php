@@ -49,11 +49,10 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
 
     /**
      * @param string $key 32-byte raw key or 64-char hex-encoded key
-     */
-    /**
+     *
      * @throws ProcessorException When the key is not 32 raw bytes or 64 hex characters
      */
-    public function __construct(string $key)
+    public function __construct(#[\SensitiveParameter] string $key)
     {
         $this->key = self::resolveKey($key);
     }
@@ -65,7 +64,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      * @throws ProcessorException When the key is neither 32 raw bytes nor
      *                            valid 64-char hex
      */
-    private static function resolveKey(string $key): string
+    private static function resolveKey(#[\SensitiveParameter] string $key): string
     {
         if (preg_match('/^[0-9a-fA-F]{64}\z/', $key) === 1) {
             $decoded = hex2bin($key);
@@ -151,7 +150,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      *
      * @throws ProcessorException When the key is not 32 raw bytes or 64 hex characters, or OpenSSL fails to encrypt
      */
-    public static function encrypt(string $plaintext, string $key): string
+    public static function encrypt(#[\SensitiveParameter] string $plaintext, #[\SensitiveParameter] string $key): string
     {
         $resolvedKey = self::resolveKey($key);
 

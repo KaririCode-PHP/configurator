@@ -275,4 +275,39 @@ final class EnvironmentProcessorTest extends TestCase
             $processor->process('${DSN}'),
         );
     }
+
+    // ── Boundaries ───────────────────────────────────────────────────────
+
+    public function testADollarOrAnOpenReferenceAtTheEndStaysLiteral(): void
+    {
+        $processor = new EnvironmentProcessor($this->resolver);
+
+        self::assertSame('costs 5$', $processor->process('costs 5$'));
+        self::assertSame('tail ${', $processor->process('tail ${'));
+        self::assertSame('open ${DB_HOST', $processor->process('open ${DB_HOST'));
+    }
+
+    public function testAnEmptyNestedReferenceInADefaultResolvesLeniently(): void
+    {
+        $processor = new EnvironmentProcessor($this->resolver, strict: false);
+
+        self::assertSame('[]', $processor->process('[${UNDEFINED_A:${}}]'));
+        self::assertSame('db.prod.example.com:5432', $processor->process('${DB_HOST}:${DB_PORT}'));
+    }
+
+    public function testTheNameEndsAtTheFirstColon(): void
+    {
+        $processor = new EnvironmentProcessor($this->resolver);
+
+        self::assertSame('a:b', $processor->process('${UNDEFINED_A:a:b}'));
+        self::assertSame('-x', $processor->process('${UNDEFINED_A:--x}'));
+    }
+
+    public function testStrictModeIsTheDefault(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionCode(2830);
+
+        new EnvironmentProcessor($this->resolver)->process('${UNDEFINED_A}');
+    }
 }

@@ -56,7 +56,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
     }
 
     #[\Override]
-    public function process(mixed $value): mixed
+    public function process(#[\SensitiveParameter] mixed $value): mixed
     {
         if (!is_string($value)) {
             return $value;
@@ -81,7 +81,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
 
         while ($i < $length) {
             // Look for ${ start marker
-            if ($i + 1 < $length && $input[$i] === '$' && $input[$i + 1] === '{') {
+            if (substr(string: $input, offset: $i, length: 2) === '${') {
                 $expression = $this->extractBalancedExpression(input: $input, start: $i + 2, length: $length);
 
                 if ($expression !== null) {
@@ -112,32 +112,21 @@ final readonly class EnvironmentProcessor implements ValueProcessor
     private function extractBalancedExpression(string $input, int $start, int $length): ?array
     {
         $depth = 1;
-        $pos = $start;
 
-        while ($pos < $length) {
-            if ($pos + 1 < $length && $input[$pos] === '$' && $input[$pos + 1] === '{') {
-                ++$depth;
-                $pos += 2;
+        for ($pos = $start; $pos < $length; ++$pos) {
+            // The '{' of a nested '${' is then skipped as an ordinary character.
+            $depth += match (true) {
+                substr(string: $input, offset: $pos, length: 2) === '${' => 1,
+                $input[$pos] === '}' => -1,
+                default => 0,
+            };
 
-                continue;
+            if ($depth === 0) {
+                return [
+                    'content' => substr(string: $input, offset: $start, length: $pos - $start),
+                    'endPos' => $pos + 1,
+                ];
             }
-
-            if ($input[$pos] === '}') {
-                --$depth;
-
-                if ($depth === 0) {
-                    return [
-                        'content' => substr(string: $input, offset: $start, length: $pos - $start),
-                        'endPos' => $pos + 1,
-                    ];
-                }
-
-                ++$pos;
-
-                continue;
-            }
-
-            ++$pos;
         }
 
         // Unbalanced braces — return null, caller outputs literal
@@ -173,46 +162,27 @@ final readonly class EnvironmentProcessor implements ValueProcessor
     }
 
     /**
-     * Parses a variable expression into name and optional default.
-     *
-     * Handles nested ${...} in defaults by tracking brace depth
-     * to find the colon separator at the top level.
+     * Splits a reference at its first colon: the name before it, and the
+     * default after it, without the '-' of the shell form. A name holds no
+     * colon and no reference; a default may nest references, which
+     * resolveReference() interpolates.
      *
      * @return array{name: string, default: string|null}
      */
     private function parseExpression(string $expression): array
     {
-        $depth = 0;
-        $length = strlen($expression);
+        $colon = strpos($expression, ':');
 
-        for ($i = 0; $i < $length; ++$i) {
-            $char = $expression[$i];
-
-            if (substr(string: $expression, offset: $i, length: 2) === '${') {
-                ++$depth;
-                ++$i; // skip '{'
-
-                continue;
-            }
-
-            if ($char === '}' && $depth > 0) {
-                --$depth;
-
-                continue;
-            }
-
-            // Colon separator at top level → marks default value boundary
-            if ($char === ':' && $depth === 0) {
-                $default = substr($expression, $i + 1);
-
-                // Strip optional leading '-' (bash :-default syntax)
-                return [
-                    'name' => substr(string: $expression, offset: 0, length: $i),
-                    'default' => str_starts_with($default, '-') ? substr($default, 1) : $default,
-                ];
-            }
+        if ($colon === false) {
+            return ['name' => $expression, 'default' => null];
         }
 
-        return ['name' => $expression, 'default' => null];
+        $default = substr($expression, $colon + 1);
+
+        // Strip optional leading '-' (bash :-default syntax)
+        return [
+            'name' => substr(string: $expression, offset: 0, length: $colon),
+            'default' => str_starts_with($default, '-') ? substr($default, 1) : $default,
+        ];
     }
 }

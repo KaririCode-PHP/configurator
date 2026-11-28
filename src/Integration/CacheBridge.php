@@ -67,7 +67,7 @@ final readonly class CacheBridge
         $cached = $this->cache->get($cacheKey);
 
         if (is_array($cached)) {
-            return $this->buildFromCached($cached, $merge);
+            return $this->buildFromCached($cached);
         }
 
         $config = $this->buildFromFiles($files, $merge);
@@ -107,9 +107,10 @@ final readonly class CacheBridge
     /**
      * @param array<array-key, mixed> $data
      */
-    private function buildFromCached(array $data, ?MergeStrategy $merge): Configuration
+    private function buildFromCached(array $data): Configuration
     {
-        $config = new Configuration($merge ?? new RecursiveMerge());
+        // Merging into an empty configuration gives the tree under any strategy.
+        $config = new Configuration();
         $config->merge($data);
         $config->seal();
 

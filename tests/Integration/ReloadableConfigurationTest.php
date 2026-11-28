@@ -198,6 +198,47 @@ final class ReloadableConfigurationTest extends TestCase
         self::assertSame('second', $config->getString('app.name'));
     }
 
+    public function testTypedReadsWithoutADefaultUseTheContractDefaults(): void
+    {
+        $config = $this->reloadable(interval: 3600.0);
+
+        self::assertSame(0, $config->getInt('missing'));
+        self::assertSame(0.0, $config->getFloat('missing'));
+        self::assertFalse($config->getBool('missing'));
+    }
+
+    public function testAMissingWatchedFileDoesNotHideALaterChange(): void
+    {
+        $other = $this->directory . '/other.json';
+        $this->write($other, '{"other": 1}', time() - 100);
+        $builder = ConfigurationBuilder::create()->withFile($this->file)->withFile($other);
+        $missing = $this->directory . '/missing.json';
+        $config = new ReloadableConfiguration([$missing, $this->file, $other], $builder, 0.0, $this->dispatcher);
+
+        $this->write($this->file, '{"app": {"name": "second"}}', time());
+        $this->write($other, '{"other": 2}', time());
+
+        self::assertTrue($config->checkAndReload());
+
+        $reloaded = $this->dispatcher->of(ConfigReloaded::class)[0];
+        self::assertSame([$this->file, $other], $reloaded->changedFiles);
+        self::assertLessThan(60_000.0, $reloaded->reloadTimeMs);
+        self::assertSame(2, $config->getInt('other'));
+    }
+
+    public function testAFailedRebuildWithoutADispatcherRethrowsTheBuilderFailure(): void
+    {
+        $builder = ConfigurationBuilder::create()->withFile($this->file);
+        $config = new ReloadableConfiguration([$this->file], $builder, 0.0);
+        $this->write($this->file, '{"app": ', time());
+
+        self::assertSame('first', $config->getString('app.name'));
+
+        $this->expectException(LoaderException::class);
+
+        $config->forceReload();
+    }
+
     private function reloadable(float $interval): ReloadableConfiguration
     {
         $builder = ConfigurationBuilder::create()->withFile($this->file);

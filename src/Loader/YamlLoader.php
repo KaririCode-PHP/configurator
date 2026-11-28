@@ -627,7 +627,7 @@ final readonly class YamlLoader implements Loader
 
         if ($first === '[' || $first === '{' || $first === '"' || $first === "'") {
             if ($continuation !== []) {
-                throw LoaderException::invalidSyntax(sprintf('unexpected %s after a flow collection or a quoted scalar', $this->describe($continuation[0])));
+                throw LoaderException::invalidSyntax(sprintf('%s cannot follow a flow collection or a quoted scalar', $this->describe($continuation[0])));
             }
 
             return match ($first) {
@@ -655,7 +655,7 @@ final readonly class YamlLoader implements Loader
             $part = $this->stripInlineComment(trim($line));
 
             if ($this->isSequenceItem($part) || $this->findKeyColon($part) !== false) {
-                throw LoaderException::invalidSyntax(sprintf('unexpected %s inside a multi-line plain scalar', $this->describe($part)));
+                throw LoaderException::invalidSyntax(sprintf('%s cannot continue a multi-line plain scalar', $this->describe($part)));
             }
 
             $parts[] = $part;
@@ -733,7 +733,7 @@ final readonly class YamlLoader implements Loader
 
     private function parseKey(string $key): string
     {
-        return $this->unquote(trim($key));
+        return $this->unquote($key);
     }
 
     private function unquote(string $value): string

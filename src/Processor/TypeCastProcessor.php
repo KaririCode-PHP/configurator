@@ -62,7 +62,7 @@ final class TypeCastProcessor implements ValueProcessor
     }
 
     #[\Override]
-    public function process(mixed $value): mixed
+    public function process(#[\SensitiveParameter] mixed $value): mixed
     {
         if (!is_string($value)) {
             return $value;

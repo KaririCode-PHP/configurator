@@ -142,4 +142,16 @@ final class EventDispatcherBridgeTest extends TestCase
 
         $bridge->load(self::FIXTURES . '/app.php');
     }
+
+    public function testTypedReadsWithoutADefaultUseTheContractDefaults(): void
+    {
+        $bridge = new EventDispatcherBridge($this->dispatcher);
+        $bridge->seal();
+
+        self::assertSame(0, $bridge->getInt('missing'));
+        self::assertSame(0.0, $bridge->getFloat('missing'));
+        self::assertFalse($bridge->getBool('missing'));
+        self::assertSame('', $bridge->getString('missing'));
+        self::assertSame([], $bridge->getArray('missing'));
+    }
 }

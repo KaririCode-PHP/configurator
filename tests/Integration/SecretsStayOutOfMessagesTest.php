@@ -81,6 +81,21 @@ final class SecretsStayOutOfMessagesTest extends TestCase
         }
     }
 
+    public function testKeysAndValuesStayOutOfStackTraces(): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            new \KaririCode\Configurator\Processor\EncryptedValueProcessor(self::SECRET);
+            self::fail('the key is too short');
+        } catch (ConfigurationException $exception) {
+            self::assertStringNotContainsString(self::SECRET, $exception->getTraceAsString());
+            self::assertStringNotContainsString(self::SECRET, print_r($exception->getTrace(), true));
+        } finally {
+            ini_set('zend.exception_ignore_args', $previous === false ? '1' : $previous);
+        }
+    }
+
     public function testTypedAccessorsDescribeTheRejectedString(): void
     {
         $config = new Configuration();

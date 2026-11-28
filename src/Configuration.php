@@ -187,19 +187,11 @@ final class Configuration implements Configurator
         /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
-        if ($value === null) {
-            return $default;
-        }
-
-        if (is_int($value)) {
-            return $value;
-        }
-
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-
-        throw AccessException::typeMismatch(path: $path, expected: 'int', actual: get_debug_type($value));
+        return match (true) {
+            $value === null => $default,
+            is_numeric($value) => (int) $value,
+            default => throw AccessException::typeMismatch(path: $path, expected: 'int', actual: get_debug_type($value)),
+        };
     }
 
     #[\Override]
@@ -208,19 +200,11 @@ final class Configuration implements Configurator
         /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
-        if ($value === null) {
-            return $default;
-        }
-
-        if (is_float($value) || is_int($value)) {
-            return (float) $value;
-        }
-
-        if (is_numeric($value)) {
-            return (float) $value;
-        }
-
-        throw AccessException::typeMismatch(path: $path, expected: 'float', actual: get_debug_type($value));
+        return match (true) {
+            $value === null => $default,
+            is_numeric($value) => (float) $value,
+            default => throw AccessException::typeMismatch(path: $path, expected: 'float', actual: get_debug_type($value)),
+        };
     }
 
     #[\Override]

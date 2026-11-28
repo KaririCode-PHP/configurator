@@ -349,4 +349,84 @@ final class ConfigurationTest extends TestCase
 
         return $files === false ? [] : $files;
     }
+
+    // ── Defaults and coercions ───────────────────────────────────────────
+
+    public function testAStoredValueWinsOverTheDefault(): void
+    {
+        $config = new Configuration();
+        $config->merge(['app' => ['name' => 'demo']])->seal();
+
+        self::assertSame('demo', $config->get('app.name', 'fallback'));
+    }
+
+    public function testTypedReadsOfAMissingPathReturnTheirDefaults(): void
+    {
+        $config = new Configuration();
+        $config->seal();
+
+        self::assertSame('', $config->getString('missing'));
+        self::assertSame(0, $config->getInt('missing'));
+        self::assertSame(0.0, $config->getFloat('missing'));
+        self::assertFalse($config->getBool('missing'));
+        self::assertSame([], $config->getArray('missing'));
+        self::assertSame(['a', 'b'], $config->getArray('missing', ['a', 'b']));
+    }
+
+    public function testNumericReadsCoerceNumbersAndNumericStrings(): void
+    {
+        $config = new Configuration();
+        $config->merge(['n' => ['int' => 7, 'float' => 2.5, 'text' => '42', 'exp' => '1e3']])->seal();
+
+        self::assertSame(7, $config->getInt('n.int'));
+        self::assertSame(2, $config->getInt('n.float'));
+        self::assertSame(42, $config->getInt('n.text'));
+        self::assertSame(7.0, $config->getFloat('n.int'));
+        self::assertSame(2.5, $config->getFloat('n.float'));
+        self::assertSame(1000.0, $config->getFloat('n.exp'));
+    }
+
+    public function testBooleanWordsAreCaseInsensitiveAndTheEmptyStringIsFalse(): void
+    {
+        $config = new Configuration();
+        $config->merge(['f' => ['upper' => 'TRUE', 'mixed' => 'Off', 'empty' => '', 'int' => 2, 'zero' => 0]])->seal();
+
+        self::assertTrue($config->getBool('f.upper'));
+        self::assertFalse($config->getBool('f.mixed'));
+        self::assertFalse($config->getBool('f.empty'));
+        self::assertTrue($config->getBool('f.int'));
+        self::assertFalse($config->getBool('f.zero'));
+    }
+
+    public function testExtensionsAreMatchedWithoutRegardToCase(): void
+    {
+        $directory = sys_get_temp_dir() . '/kariricode-config-case-' . bin2hex(random_bytes(4));
+        mkdir($directory);
+        file_put_contents($directory . '/APP.JSON', '{"app": {"name": "upper"}}');
+
+        try {
+            $config = new Configuration();
+            $config->registerLoader(new \KaririCode\Configurator\Loader\JsonLoader(), 'CONF');
+            file_put_contents($directory . '/extra.conf', '{"extra": true}');
+
+            $config->load($directory . '/APP.JSON')->load($directory . '/extra.conf')->seal();
+
+            self::assertSame('upper', $config->getString('app.name'));
+            self::assertTrue($config->getBool('extra'));
+        } finally {
+            array_map(unlink(...), [$directory . '/APP.JSON', $directory . '/extra.conf']);
+            rmdir($directory);
+        }
+    }
+
+    public function testAFloatReadOfTextFails(): void
+    {
+        $config = new Configuration();
+        $config->merge(['rate' => 'fast'])->seal();
+
+        $this->expectException(\KaririCode\Configurator\Exception\AccessException::class);
+        $this->expectExceptionCode(2800);
+
+        $config->getFloat('rate');
+    }
 }

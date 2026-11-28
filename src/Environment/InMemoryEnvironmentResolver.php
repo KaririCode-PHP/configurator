@@ -35,6 +35,7 @@ final class InMemoryEnvironmentResolver implements EnvironmentResolver
      * @param array<string, string> $variables
      */
     public function __construct(
+        #[\SensitiveParameter]
         private array $variables = [],
     ) {}
 
@@ -50,7 +51,7 @@ final class InMemoryEnvironmentResolver implements EnvironmentResolver
         return isset($this->variables[$name]);
     }
 
-    public function set(string $name, string $value): self
+    public function set(string $name, #[\SensitiveParameter] string $value): self
     {
         $this->variables[$name] = $value;
 
