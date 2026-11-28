@@ -45,6 +45,9 @@ final readonly class TomlLoader implements Loader
     /** Byte that replaces string content during position-preserving scans. */
     private const string MASK = "\x00";
 
+    /** @var array<string, string> The closing bracket each opening one expects */
+    private const array CLOSERS = ['[' => ']', '{' => '}'];
+
     /** @var array<string, string> Single-character escapes of TOML 1.0 basic strings */
     private const array ESCAPES = [
         'b' => "\x08",
@@ -495,27 +498,31 @@ final readonly class TomlLoader implements Loader
     }
 
     /**
-     * @throws LoaderException When text follows the closing bracket
+     * @throws LoaderException When a closing bracket does not match the
+     *                         innermost open one, or text follows the
+     *                         value's closing bracket
      */
     private function assertClosesAtEnd(string $value): void
     {
         $masked = $this->maskStrings($value);
-        $depth = 0;
+        $expected = [];
         $last = strlen($masked) - 1;
 
         for ($i = 0; $i <= $last; ++$i) {
-            $depth += match ($masked[$i]) {
-                '[', '{' => 1,
-                ']', '}' => -1,
-                default => 0,
-            };
+            $char = $masked[$i];
 
-            if ($depth === 0 && $i < $last) {
+            if (isset(self::CLOSERS[$char])) {
+                $expected[] = self::CLOSERS[$char];
+            } elseif (in_array(needle: $char, haystack: self::CLOSERS, strict: true) && array_pop($expected) !== $char) {
+                throw LoaderException::invalidSyntax(sprintf("mismatched closing bracket '%s'", $char));
+            }
+
+            if ($expected === [] && $i < $last) {
                 throw LoaderException::invalidSyntax('unexpected text after a closing bracket');
             }
         }
 
-        if ($depth !== 0) {
+        if ($expected !== []) {
             throw LoaderException::invalidSyntax('unbalanced brackets');
         }
     }

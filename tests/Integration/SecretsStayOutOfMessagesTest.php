@@ -19,7 +19,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class SecretsStayOutOfMessagesTest extends TestCase
 {
-    private const string SECRET = 's3cr3t-Value-91f2';
+    private const string SECRET = 's3cr3t-Value-91f2'; // secret-scan:allow, a sample the test must not see in messages
 
     private string $directory;
 

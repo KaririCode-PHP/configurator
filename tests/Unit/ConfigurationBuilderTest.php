@@ -282,6 +282,18 @@ final class ConfigurationBuilderTest extends TestCase
         self::assertSame('smtp', $config->get('services.mailer.transport'));
     }
 
+    public function testAMissingDirectoryIsSkipped(): void
+    {
+        self::assertSame([], ConfigurationBuilder::create()->withDirectory($this->fixturesPath . '/does-not-exist')->build()->all());
+
+        $config = ConfigurationBuilder::create()
+            ->withDirectory($this->fixturesPath . '/does-not-exist')
+            ->withDirectory($this->fixturesPath)
+            ->build();
+
+        self::assertSame('smtp', $config->get('services.mailer.transport'));
+    }
+
     private static function provider(): \KaririCode\Contract\Configuration\ConfigProvider
     {
         return new class implements \KaririCode\Contract\Configuration\ConfigProvider {

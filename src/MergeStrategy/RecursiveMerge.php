@@ -56,16 +56,13 @@ final readonly class RecursiveMerge implements MergeStrategy
     }
 
     /**
-     * Checks if an array has string keys (associative).
+     * Whether an array is a map: an empty array is a list, so an empty
+     * value replaces a map instead of merging into it.
      *
      * @param array<mixed> $array
      */
     private function isAssociative(array $array): bool
     {
-        if ($array === []) {
-            return false;
-        }
-
         return !array_is_list($array);
     }
 }

@@ -67,6 +67,16 @@ final class RecursiveMergeTest extends TestCase
         self::assertSame(['nested' => 'value'], $result['key']);
     }
 
+    public function testAnEmptyArrayReplacesANestedMap(): void
+    {
+        $result = $this->strategy->merge(
+            ['cache' => ['driver' => 'redis', 'ttl' => 60]],
+            ['cache' => []],
+        );
+
+        self::assertSame(['cache' => []], $result);
+    }
+
     public function testEmptyBaseReturnSource(): void
     {
         $result = $this->strategy->merge([], ['key' => 'value']);

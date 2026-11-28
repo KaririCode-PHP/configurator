@@ -70,6 +70,23 @@ final class JsonLoaderTest extends TestCase
         $this->loader->load($this->fixturesPath);
     }
 
+    public function testADocumentThatIsNotAnObjectOrArrayIsRejected(): void
+    {
+        $path = sys_get_temp_dir() . '/kariricode-config-scalar-' . bin2hex(random_bytes(4)) . '.json';
+        file_put_contents($path, '"only a string"');
+
+        try {
+            $this->loader->load($path);
+            self::fail('a scalar document must be rejected');
+        } catch (LoaderException $exception) {
+            self::assertSame(2821, $exception->getCode());
+            self::assertStringContainsString('string', $exception->getMessage());
+            self::assertStringNotContainsString('only a string', $exception->getMessage());
+        } finally {
+            unlink($path);
+        }
+    }
+
     public function testDocumentsDecodeUpToTheDepthLimit(): void
     {
         $path = sys_get_temp_dir() . '/kariricode-config-depth-' . bin2hex(random_bytes(4)) . '.json';

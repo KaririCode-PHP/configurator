@@ -241,4 +241,10 @@ final class TypeCastProcessorTest extends TestCase
     {
         self::assertSame(42, $this->processor->process(42));
     }
+
+    public function testStringsWithoutAKnownPrefixPassThrough(): void
+    {
+        self::assertSame('plain', $this->processor->process('plain'));
+        self::assertSame('https://example.org', $this->processor->process('https://example.org'));
+    }
 }

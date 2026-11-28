@@ -52,6 +52,10 @@ final class TomlCorpusTest extends TestCase
         ];
         yield 'inline tables' => ["t = {a = 1, b = \"x\"}\ne = {}\n", ['t' => ['a' => 1, 'b' => 'x'], 'e' => []]];
         yield 'arrays of arrays' => ["a = [[1], [2]]\n", ['a' => [[1], [2]]]];
+        yield 'byte order mark' => ["\xEF\xBB\xBFa = 1\n", ['a' => 1]];
+        yield 'no spaces in arrays and inline tables' => ["n = [1,2,3]\nt = {a=12,b=\"x\"}\n", ['n' => [1, 2, 3], 't' => ['a' => 12, 'b' => 'x']]];
+        yield 'array of inline tables' => ["a = [{x = 1}, {y = 2}]\n", ['a' => [['x' => 1], ['y' => 2]]]];
+        yield 'quotes and brackets inside strings' => ["a = [\"x\\\"]\", 1]\np = 'C:\\' # path\n", ['a' => ['x"]', 1], 'p' => 'C:\\']];
     }
 
     /**
@@ -83,6 +87,8 @@ final class TomlCorpusTest extends TestCase
         yield 'invalid bare key' => ["  a\$b = 1\n", "invalid key 'a\$b' on line 1"];
         yield 'unterminated quoted key' => ["\"abc = 1\n", "expected 'key = value' on line 1"];
         yield 'number prefix inside text' => ["a = x0x1F\n", 'invalid value (strings must be quoted) on line 1'];
+        yield 'octal prefix inside text' => ["a = x0o7\n", 'invalid value (strings must be quoted) on line 1'];
+        yield 'dotted key that starts with an invalid character' => ["?.a = 1\n", "invalid key '?.a' on line 1"];
         yield 'text after an array' => ["a = [1, 2] x\n", 'unexpected text after a closing bracket on line 1'];
         yield 'text after an inline table' => ["t = {a = 1} x\n", 'unexpected text after a closing bracket on line 1'];
         yield 'two arrays' => ["a = [1] [2]\n", 'unexpected text after a closing bracket on line 1'];
@@ -90,6 +96,15 @@ final class TomlCorpusTest extends TestCase
         yield 'trailing comma in an inline table' => ["t = {a = 1,}\n", "unexpected ',' (empty item) on line 1"];
         yield 'unterminated array' => ["a = [1,\n2\n", 'unterminated array on line 1'];
         yield 'missing value' => ["a =\n", 'missing value on line 1'];
+        yield 'array closed by a brace' => ["a = [1, 2}\n", "mismatched closing bracket '}' on line 1"];
+        yield 'inline table closed by a square bracket' => ["t = {x = 1]\n", "mismatched closing bracket ']' on line 1"];
+        yield 'crossed nested brackets' => ["a = [{x = 1]}\n", "mismatched closing bracket ']' on line 1"];
+        yield 'unterminated inline table' => ["t = {x = 1\n", 'unbalanced brackets on line 1'];
+        yield 'inline table across lines inside an array' => ["a = [\n  {x = 1,\n  y = 2}\n]\n", 'inline tables must be on a single line on line 1'];
+        yield 'inline table item without an equals sign' => ["t = {a}\n", "expected 'key = value' in an inline table on line 1"];
+        yield 'malformed table header' => ["[a\nb = 1\n", "malformed table header '[a' on line 1"];
+        yield 'raw control character in a string' => ["a = \"x\x01y\"\n", 'control characters must be escaped in strings on line 1'];
+        yield 'short unicode escape' => ["a = \"\\u12\"\n", "invalid escape sequence '\\u': expected 4 hexadecimal digits on line 1"];
     }
 
     #[DataProvider('failures')]

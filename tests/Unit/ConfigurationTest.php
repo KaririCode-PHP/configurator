@@ -207,6 +207,18 @@ final class ConfigurationTest extends TestCase
         $config->getBool('value');
     }
 
+    public function testGetBoolRejectsAFloat(): void
+    {
+        $config = new Configuration();
+        $config->merge(['ratio' => 0.5]);
+
+        $this->expectException(\KaririCode\Configurator\Exception\AccessException::class);
+        $this->expectExceptionCode(2800);
+        $this->expectExceptionMessage('float');
+
+        $config->getBool('ratio');
+    }
+
     public function testGetArrayReturnsArray(): void
     {
         $config = new Configuration();

@@ -50,6 +50,9 @@ final readonly class YamlLoader implements Loader
     /** Byte that replaces quoted spans during position-preserving scans. */
     private const string MASK = "\x00";
 
+    /** @var array<string, string> The closing bracket each flow indicator expects */
+    private const array FLOW_CLOSERS = ['[' => ']', '{' => '}'];
+
     /** @var array<array-key, string> Single-character escapes (YAML 1.2, section 5.7); key "0" is stored as int */
     private const array ESCAPES = [
         '0' => "\0",
@@ -244,8 +247,7 @@ final readonly class YamlLoader implements Loader
      */
     private function hasAlias(string $stripped): bool
     {
-        return preg_match('/\*\w+/', $stripped) === 1
-            && !str_contains($stripped, '"')
+        return !str_contains($stripped, '"')
             && !str_contains($stripped, "'")
             && (preg_match('/:\s+\*\w+/', $stripped) === 1 || preg_match('/^-\s+\*\w+/', $stripped) === 1);
     }
@@ -341,39 +343,63 @@ final readonly class YamlLoader implements Loader
     /**
      * Collects the content lines of a block scalar: every line indented
      * past the parent and at least as far as the first content line (or
-     * the explicit indentation), with blank lines kept as empty strings.
+     * the explicit indentation). A blank line keeps the spaces past the
+     * content indentation, as YAML 1.2 does, and is otherwise empty.
      *
      * @param list<string> $raw
      *
      * @return array{0: list<string>, 1: int} the lines, without their indentation, and the index of the last one
+     *
+     * @throws LoaderException When a blank line before the first content
+     *                         line is indented past it (YAML 1.2, 8.1.1.1)
      */
     private function blockLines(array $raw, int $index, int $parentColumn, ?int $contentIndent): array
     {
         $content = [];
         $last = $index;
         $count = count($raw);
+        $leadingWidth = 0;
 
         for ($i = $index + 1; $i < $count; ++$i) {
             $line = $raw[$i];
 
             if (trim($line) === '') {
-                $content[] = '';
+                $leadingWidth = $contentIndent === null ? max($leadingWidth, strlen($line)) : $leadingWidth;
+                $content[] = $line;
 
                 continue;
             }
 
             $lineIndent = $this->indentLevel($line);
-            $contentIndent ??= $lineIndent;
 
-            if ($lineIndent <= $parentColumn || $lineIndent < $contentIndent) {
+            if ($lineIndent <= $parentColumn || $lineIndent < ($contentIndent ?? $lineIndent)) {
                 break;
             }
 
+            if ($contentIndent === null && $leadingWidth > $lineIndent) {
+                throw LoaderException::invalidSyntax('a blank line before the first line of a block scalar is indented past it');
+            }
+
+            $contentIndent ??= $lineIndent;
             $content[] = substr($line, $contentIndent);
             $last = $i;
         }
 
-        return [$content, $last];
+        return [array_map(fn(string $line): string => $this->blankLineContent(line: $line, contentIndent: $contentIndent), $content), $last];
+    }
+
+    /**
+     * The content of a block scalar line: a content line as it is, and a
+     * blank line as the spaces past the content indentation (often none;
+     * always none in a block without content lines).
+     */
+    private function blankLineContent(string $line, ?int $contentIndent): string
+    {
+        if (trim($line) !== '') {
+            return $line;
+        }
+
+        return $contentIndent !== null && strlen($line) > $contentIndent ? substr($line, $contentIndent) : '';
     }
 
     /**
@@ -838,27 +864,31 @@ final readonly class YamlLoader implements Loader
     }
 
     /**
-     * @throws LoaderException When text follows the closing bracket
+     * @throws LoaderException When a closing bracket does not match the
+     *                         innermost open one, or text follows the
+     *                         collection's closing bracket
      */
     private function assertFlowClosesAtEnd(string $value): void
     {
         $masked = $this->maskQuoted($value);
-        $depth = 0;
+        $expected = [];
         $last = strlen($masked) - 1;
 
         for ($i = 0; $i <= $last; ++$i) {
-            $depth += match ($masked[$i]) {
-                '[', '{' => 1,
-                ']', '}' => -1,
-                default => 0,
-            };
+            $char = $masked[$i];
 
-            if ($depth === 0 && $i < $last) {
+            if (isset(self::FLOW_CLOSERS[$char])) {
+                $expected[] = self::FLOW_CLOSERS[$char];
+            } elseif (in_array(needle: $char, haystack: self::FLOW_CLOSERS, strict: true) && array_pop($expected) !== $char) {
+                throw LoaderException::invalidSyntax(sprintf("mismatched closing bracket '%s' in a flow collection", $char));
+            }
+
+            if ($expected === [] && $i < $last) {
                 throw LoaderException::invalidSyntax('unexpected text after a flow collection');
             }
         }
 
-        if ($depth !== 0) {
+        if ($expected !== []) {
             throw LoaderException::invalidSyntax('unbalanced flow collection');
         }
     }

@@ -81,6 +81,45 @@ final class YamlCorpusTest extends TestCase
         yield 'asterisks that are not aliases' => ["a: \"*x\"\nb: 'x *y'\nc: x*y\n", ['a' => '*x', 'b' => 'x *y', 'c' => 'x*y']];
         yield 'comments everywhere' => ["# head\na: 1 # tail\n  # indented comment\nb: 2\n", ['a' => 1, 'b' => 2]];
         yield 'key with trailing spaces' => ["parent:   \n  child: 1\n", ['parent' => ['child' => 1]]];
+        yield 'CRLF line endings in a block scalar' => ["a: |\r\n  x\r\n  y\r\n", ['a' => "x\ny\n"]];
+        yield 'folded scalar with blank and more-indented lines' => [
+            "a: >\n  one\n  two\n\n  three\n\n\n  four\n    indented\n  five\nb: end\n",
+            ['a' => "one two\nthree\n\nfour\n  indented\nfive\n", 'b' => 'end'],
+        ];
+        yield 'block scalar as a sequence item' => ["items:\n  - |\n    one\n    two\n  - plain\n", ['items' => ["one\ntwo\n", 'plain']]];
+        yield 'keys with brackets, braces and a hash' => ["a[0]: 1\nb{c}: 2\nd#e: 3\n", ['a[0]' => 1, 'b{c}' => 2, 'd#e' => 3]];
+        yield 'text that resembles an anchor, a merge key or an alias' => [
+            "a: '- &x'\nb: '<<: y'\nc: b - *c\n",
+            ['a' => '- &x', 'b' => '<<: y', 'c' => 'b - *c'],
+        ];
+        yield 'multi-line flow sequence with a blank line and a folded item' => ["list: [a,\n\n  b\n  c]\n", ['list' => ['a', 'b c']]];
+        yield 'multi-line flow mapping' => ["map: {a: 1,\n  b: 2}\n", ['map' => ['a' => 1, 'b' => 2]]];
+        yield 'flow collections without spaces, JSON-style keys and a key without a value first' => [
+            "x: [a,b]\ny: {\"k\":1}\nz: {c, d: 1}\n",
+            ['x' => ['a', 'b'], 'y' => ['k' => 1], 'z' => ['c' => null, 'd' => 1]],
+        ];
+        yield 'quote characters and radix prefixes inside plain scalars' => [
+            "a: x\"\nb: y'\nc: x0o7\nd: x0x1F\n",
+            ['a' => 'x"', 'b' => "y'", 'c' => 'x0o7', 'd' => 'x0x1F'],
+        ];
+        yield 'escaped quotes and hashes inside quoted scalars' => [
+            "a: \"say \\\"hi\\\" # not a comment\"\nb: 'it''s # here'\n",
+            ['a' => 'say "hi" # not a comment', 'b' => "it's # here"],
+        ];
+        // YAML 1.2 separates a comment with spaces or tabs; PyYAML, a YAML 1.1 parser, rejects the tab.
+        yield 'comments after a tab and without a space after the hash' => ["a: 1\t# note\nb: 2 #note\n", ['a' => 1, 'b' => 2]];
+        yield 'backslashes in a block scalar' => ["a: |\n  C:\\dir\\new\n", ['a' => "C:\\dir\\new\n"]];
+        yield 'blank lines after a block scalar' => ["a: |\n  x\n\n\nb: 1\n", ['a' => "x\n", 'b' => 1]];
+        yield 'blank lines that keep the spaces past the block indentation' => [
+            "a: |\n  x\n   \n  y\nb: >\n  x\n   \n  y\nc: |-\n  x\n    \n",
+            ['a' => "x\n \ny\n", 'b' => "x\n \ny\n", 'c' => "x\n  "],
+        ];
+        yield 'block scalar of blank lines only' => ["a: |\n   \nb: 1\n", ['a' => '', 'b' => 1]];
+        yield 'leading blank line as deep as the block' => ["a: |\n  \n  x\n", ['a' => "\nx\n"]];
+        yield 'explicit indentation with a deeper leading blank line' => ["a: |2\n     \n  x\n", ['a' => "   \nx\n"]];
+        yield 'folded scalar with a leading blank line' => ["a: >\n\n  x\n", ['a' => "\nx\n"]];
+        yield 'folded scalar with a blank line after a more-indented one' => ["a: >\n  x\n    more\n\n  y\n", ['a' => "x\n  more\n\ny\n"]];
+        yield 'folded scalar with a line one space deeper' => ["a: >\n  a\n   b\n  c\n", ['a' => "a\n b\nc\n"]];
     }
 
     /**
@@ -123,7 +162,15 @@ final class YamlCorpusTest extends TestCase
         yield 'short unicode escape' => ["a: \"\\u12G4\"\n", 2820, "invalid escape sequence '\\u': expected 4 hexadecimal digits"];
         yield 'surrogate escape' => ["a: \"\\uD800\"\n", 2820, 'invalid Unicode scalar value U+D800'];
         yield 'text after a flow collection' => ["a: [1, 2] x\n", 2820, 'unexpected text after a flow collection'];
+        yield 'flow mapping closed by a square bracket' => ["a: {x: 1]\n", 2820, "mismatched closing bracket ']' in a flow collection"];
+        yield 'flow sequence closed by a brace' => ["a: [1, 2}\n", 2820, "mismatched closing bracket '}' in a flow collection"];
+        yield 'crossed nested flow collections' => ["a: [1, {b: 2]}\n", 2820, "mismatched closing bracket ']' in a flow collection"];
+        yield 'mismatch across lines' => ["a: [1,\n  2}\n", 2820, "mismatched closing bracket '}' in a flow collection"];
         yield 'continuation after a flow collection' => ["a: [1]\n  b\n", 2820, 'cannot follow a flow collection or a quoted scalar'];
+        yield 'continuation after a single-quoted scalar' => ["a: 'x'\n  b\n", 2820, 'cannot follow a flow collection or a quoted scalar'];
+        yield 'colon inside a comment' => ["a #b: 1\n", 2820, "expected 'key: value' at indentation 0, got a line that is neither a key nor a sequence item"];
+        yield 'leading blank line indented past the block' => ["a: |\n   \n  x\n", 2820, 'a blank line before the first line of a block scalar is indented past it'];
+        yield 'line between the key and the block indentation' => ["a: |\n    x\n  y\n", 2820, 'a line that is neither a key nor a sequence item cannot follow a flow collection or a quoted scalar'];
         yield 'key inside a plain scalar' => ["a: first\n  b: c\n", 2820, "the key 'b' cannot continue a multi-line plain scalar"];
         yield 'key where an item belongs' => ["x:\n  - a\n  b: 1\n", 2820, "expected a sequence item '- ' at indentation 2, got the key 'b'"];
         yield 'item where a key belongs' => ["a: 1\n- b\n", 2820, "expected 'key: value' at indentation 0, got a sequence item"];
@@ -139,6 +186,14 @@ final class YamlCorpusTest extends TestCase
             self::assertSame($code, $exception->getCode());
             self::assertStringContainsString($message, $exception->getMessage());
         }
+    }
+
+    public function testADirectoryIsNotAConfigurationFile(): void
+    {
+        $this->expectException(LoaderException::class);
+        $this->expectExceptionCode(2811);
+
+        new YamlLoader()->load(sys_get_temp_dir());
     }
 
     /** @return array<array-key, mixed> */
