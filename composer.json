@@ -44,7 +44,7 @@
     "suggest": {
         "ext-openssl": "Required to decrypt ENC(...) values (EncryptedValueProcessor, AES-256-GCM)",
         "kariricode/cache": "PSR-16 implementation from the KaririCode ecosystem (for CacheBridge)",
-        "kariricode/dotenv": "For .env file integration (DotenvBridge, withDotenv)",
+        "kariricode/dotenv": "4.5 or later: DotenvEnvironmentResolver, the EnvironmentResolver of a loaded .env store, for withDotenv()",
         "kariricode/event-dispatcher": "PSR-14 implementation from the KaririCode ecosystem (for lifecycle events)",
         "kariricode/processor-pipeline": "For running ConfigurationProcessor inside processing pipelines",
         "psr/container": "Required by Psr11Bridge (any PSR-11 container)",

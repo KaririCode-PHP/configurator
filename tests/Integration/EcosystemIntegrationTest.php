@@ -7,7 +7,6 @@ namespace KaririCode\Configurator\Tests\Integration;
 use KaririCode\Configurator\ConfigurationBuilder;
 use KaririCode\Configurator\Environment\InMemoryEnvironmentResolver;
 use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
-use KaririCode\Configurator\Integration\DotenvBridge;
 use KaririCode\Configurator\Processor\EncryptedValueProcessor;
 use KaririCode\Configurator\Processor\EnvironmentProcessor;
 use KaririCode\Configurator\Processor\TypeCastProcessor;
@@ -17,7 +16,8 @@ use KaririCode\Contract\Environment\EnvironmentResolver;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Verifies ecosystem contract compliance and Dotenv integration.
+ * Verifies ecosystem contract compliance and .env interpolation through
+ * the contract's EnvironmentResolver.
  *
  * Tests that all implementations satisfy the ecosystem-level contracts
  * of kariricode/contract.
@@ -49,36 +49,9 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertTrue(is_subclass_of($implementation, $contract));
     }
 
-    // ── withDotenv() Integration ──────────────────────────────────────
+    // ── withDotenv() ──────────────────────────────────────────────────────
 
-    public function testWithDotenvAcceptsObjectWithAllMethod(): void
-    {
-        $dotenv = new class {
-            /** @return array<string, string> */
-            public function all(): array
-            {
-                return [
-                    'APP_NAME' => 'KaririCode',
-                    'APP_PORT' => '8080',
-                ];
-            }
-        };
-
-        $config = ConfigurationBuilder::create()
-            ->withDotenv($dotenv)
-            ->withOverrides([
-                'app' => [
-                    'name' => '${APP_NAME}',
-                    'port' => '${APP_PORT}',
-                ],
-            ])
-            ->build();
-
-        self::assertSame('KaririCode', $config->getString('app.name'));
-        self::assertSame('8080', $config->getString('app.port'));
-    }
-
-    public function testWithDotenvAcceptsEnvironmentResolverDirectly(): void
+    public function testWithDotenvInterpolatesFromTheResolver(): void
     {
         $resolver = new InMemoryEnvironmentResolver([
             'DB_HOST' => 'db.kariricode.local',
@@ -94,26 +67,24 @@ final class EcosystemIntegrationTest extends TestCase
         self::assertSame('db.kariricode.local', $config->getString('database.host'));
     }
 
-    public function testWithDotenvResolverSystemFallbackDisabled(): void
+    public function testWithDotenvPrefersTheStoreToTheProcessEnvironment(): void
     {
-        $key = 'KCODE_RESOLVER_NOFALLBACK_' . bin2hex(random_bytes(4));
-        $_ENV[$key] = 'should_not_resolve';
+        $key = 'KCODE_DOTENV_PRIORITY_' . bin2hex(random_bytes(4));
+        $_ENV[$key] = 'from_system';
 
         try {
-            $resolver = new InMemoryEnvironmentResolver([]);
-
-            $this->expectException(\KaririCode\Configurator\Exception\ConfigurationException::class);
-
-            ConfigurationBuilder::create()
-                ->withDotenv($resolver, strict: true, systemFallback: false)
+            $config = ConfigurationBuilder::create()
+                ->withDotenv(new InMemoryEnvironmentResolver([$key => 'from_store']))
                 ->withOverrides(['val' => '${' . $key . '}'])
                 ->build();
+
+            self::assertSame('from_store', $config->getString('val'));
         } finally {
             unset($_ENV[$key]);
         }
     }
 
-    public function testWithDotenvResolverSystemFallbackEnabled(): void
+    public function testWithDotenvFallsBackToTheProcessEnvironment(): void
     {
         $key = 'KCODE_RESOLVER_FALLBACK_' . bin2hex(random_bytes(4));
         $_ENV[$key] = 'from_system';
@@ -132,75 +103,18 @@ final class EcosystemIntegrationTest extends TestCase
         }
     }
 
-    public function testWithDotenvRejectsInvalidObject(): void
+    public function testWithDotenvWithoutFallbackIgnoresTheProcessEnvironment(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('all() method');
-
-        ConfigurationBuilder::create()->withDotenv(new \stdClass());
-    }
-
-    public function testWithDotenvStrictModeThrowsOnUndefined(): void
-    {
-        $dotenv = new class {
-            /** @return array<string, string> */
-            public function all(): array
-            {
-                return [];
-            }
-        };
-
-        $this->expectException(\KaririCode\Configurator\Exception\ConfigurationException::class);
-
-        ConfigurationBuilder::create()
-            ->withDotenv($dotenv, strict: true)
-            ->withOverrides(['key' => '${UNDEFINED_VAR}'])
-            ->build();
-    }
-
-    public function testWithDotenvSystemFallback(): void
-    {
-        $key = 'KCODE_DOTENV_BRIDGE_TEST_' . bin2hex(random_bytes(4));
-        $_ENV[$key] = 'from_system';
-
-        try {
-            $dotenv = new class {
-                /** @return array<string, string> */
-                public function all(): array
-                {
-                    return [];
-                }
-            };
-
-            $config = ConfigurationBuilder::create()
-                ->withDotenv($dotenv, strict: true, systemFallback: true)
-                ->withOverrides(['val' => '${' . $key . '}'])
-                ->build();
-
-            self::assertSame('from_system', $config->getString('val'));
-        } finally {
-            unset($_ENV[$key]);
-        }
-    }
-
-    public function testWithDotenvSystemFallbackDisabled(): void
-    {
-        $key = 'KCODE_DOTENV_NO_FALLBACK_' . bin2hex(random_bytes(4));
+        $key = 'KCODE_RESOLVER_NOFALLBACK_' . bin2hex(random_bytes(4));
         $_ENV[$key] = 'should_not_resolve';
 
         try {
-            $dotenv = new class {
-                /** @return array<string, string> */
-                public function all(): array
-                {
-                    return [];
-                }
-            };
+            $resolver = new InMemoryEnvironmentResolver([]);
 
             $this->expectException(\KaririCode\Configurator\Exception\ConfigurationException::class);
 
             ConfigurationBuilder::create()
-                ->withDotenv($dotenv, strict: true, systemFallback: false)
+                ->withDotenv($resolver, strict: true, systemFallback: false)
                 ->withOverrides(['val' => '${' . $key . '}'])
                 ->build();
         } finally {
@@ -208,23 +122,24 @@ final class EcosystemIntegrationTest extends TestCase
         }
     }
 
-    // ── DotenvBridge Convenience ──────────────────────────────────────
-
-    public function testDotenvBridgeCreatesConfiguredBuilder(): void
+    public function testWithDotenvStrictModeThrowsOnUndefined(): void
     {
-        $dotenv = new class {
-            /** @return array<string, string> */
-            public function all(): array
-            {
-                return ['BRIDGE_VAR' => 'bridged'];
-            }
-        };
+        $this->expectException(\KaririCode\Configurator\Exception\ConfigurationException::class);
 
-        $config = DotenvBridge::configure($dotenv)
-            ->withOverrides(['test' => '${BRIDGE_VAR}'])
+        ConfigurationBuilder::create()
+            ->withDotenv(new InMemoryEnvironmentResolver([]), strict: true, systemFallback: false)
+            ->withOverrides(['key' => '${UNDEFINED_VAR}'])
+            ->build();
+    }
+
+    public function testWithDotenvLenientModeResolvesUndefinedToEmpty(): void
+    {
+        $config = ConfigurationBuilder::create()
+            ->withDotenv(new InMemoryEnvironmentResolver([]), strict: false, systemFallback: false)
+            ->withOverrides(['key' => 'x${KCODE_UNDEFINED_VAR}y'])
             ->build();
 
-        self::assertSame('bridged', $config->getString('test'));
+        self::assertSame('xy', $config->getString('key'));
     }
 
     // ── Ecosystem Provider via Canonical Interface ────────────────────
@@ -290,18 +205,10 @@ final class EcosystemIntegrationTest extends TestCase
         $encKey = str_repeat('k', 32);
         $encrypted = EncryptedValueProcessor::encrypt('s3cr3t', $encKey);
 
-        $dotenv = new class ($encrypted) {
-            public function __construct(private readonly string $encVal) {}
-
-            /** @return array<string, string> */
-            public function all(): array
-            {
-                return [
-                    'APP_PORT' => 'int:9090',
-                    'DB_SECRET' => $this->encVal,
-                ];
-            }
-        };
+        $dotenv = new InMemoryEnvironmentResolver([
+            'APP_PORT' => 'int:9090',
+            'DB_SECRET' => $encrypted,
+        ]);
 
         $config = ConfigurationBuilder::create()
             ->withDotenv($dotenv)

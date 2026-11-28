@@ -111,46 +111,29 @@ Strict mode is **on by default**. This prevents silent misconfiguration in produ
 
 ## Dotenv Integration
 
-Three paths, from most concise to most explicit:
-
-### 1. DotenvBridge (one-liner)
+The builder reads a `.env` store through the contract's
+`EnvironmentResolver`; kariricode/dotenv 4.5 and later ship the resolver of
+their store (ADR-010):
 
 ```php
-use KaririCode\Configurator\Integration\DotenvBridge;
+use KaririCode\Configurator\ConfigurationBuilder;
 use KaririCode\Dotenv\Dotenv;
+use KaririCode\Dotenv\Integration\DotenvEnvironmentResolver;
 
 $dotenv = new Dotenv('/app');
 $dotenv->load();
 
-$config = DotenvBridge::configure($dotenv)
-    ->withDirectory('/app/config')
-    ->build();
-```
-
-### 2. Builder `withDotenv()`
-
-```php
 $config = ConfigurationBuilder::create()
-    ->withDotenv($dotenv)                    // auto-wires env interpolation
+    ->withDotenv(new DotenvEnvironmentResolver($dotenv))   // wires ${VAR} interpolation
     ->withDirectory('/app/config')
     ->withEnvironment('production')
     ->build();
 ```
 
-### 3. Explicit Resolver
-
-```php
-use KaririCode\Dotenv\Bridge\DotenvEnvironmentResolver;
-
-$resolver = DotenvEnvironmentResolver::fromLoaded($dotenv);
-
-$config = ConfigurationBuilder::create()
-    ->withEnvInterpolation(resolver: $resolver, strict: true)
-    ->withDirectory('/app/config')
-    ->build();
-```
-
-`withDotenv()` accepts any object with an `all(): array<string, string>` method, or an `EnvironmentResolverInterface` directly. System fallback is enabled by default — Dotenv-loaded vars take priority, then `$_ENV → $_SERVER → getenv()`.
+The store's values take priority; variables it does not define are read
+from the process environment (`$_ENV`, `$_SERVER`, `getenv()`), unless
+`systemFallback: false`. Any other `EnvironmentResolver` works the same way,
+and `withEnvInterpolation()` takes one without the fallback.
 
 ---
 
@@ -332,7 +315,7 @@ final class VaultResolver implements EnvironmentResolverInterface
 // Vault → Dotenv → System
 $resolver = new CompositeEnvironmentResolver(
     new VaultResolver($vaultClient),
-    DotenvEnvironmentResolver::fromLoaded($dotenv),
+    new DotenvEnvironmentResolver($dotenv),
     new SystemEnvironmentResolver(),
 );
 ```
@@ -350,7 +333,6 @@ $resolver = new CompositeEnvironmentResolver(
 | `ConfigurationProcessor` | ProcessorInterface | Pipeline flow step |
 | `Psr11Bridge` | — (returns a factory closure) | DI container registration |
 | `ReloadableConfiguration` | (optional PSR-14) | Hot reload |
-| `DotenvBridge` | kariricode/dotenv | .env integration |
 
 ### Shared Contracts (kariricode/contract ^4.1)
 
@@ -424,7 +406,6 @@ kariricode/configurator ^4.2
 │   │   ├── EncryptedValueProcessor    ← ENC() AES-256-GCM
 │   │   └── ValueProcessorChain       ← composite chain
 │   ├── Integration/
-│   │   ├── DotenvBridge               ← kariricode/dotenv shortcut
 │   │   ├── CacheBridge                ← PSR-16
 │   │   ├── EventDispatcherBridge      ← PSR-14
 │   │   ├── ConfigurationProcessor     ← pipeline step

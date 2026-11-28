@@ -7,6 +7,8 @@ namespace KaririCode\Configurator;
 use KaririCode\Configurator\Contract\ConfigValidator;
 use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Contract\MergeStrategy;
+use KaririCode\Configurator\Environment\CompositeEnvironmentResolver;
+use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
 use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use KaririCode\Configurator\Processor\EnvironmentProcessor;
 use KaririCode\Configurator\Processor\ValueProcessorChain;
@@ -24,11 +26,9 @@ use KaririCode\Contract\Environment\EnvironmentResolver;
  * value processor chains (env interpolation, type casting, encryption),
  * and optional schema validation.
  *
- * Ecosystem integration (V4.2):
- *   - Accepts EnvironmentResolver from kariricode/contract
- *   - Accepts ConfigProvider from kariricode/contract
- *   - withDotenv() enables one-line integration with kariricode/dotenv
- *   - Backward compatible: local Contract aliases still accepted
+ * Ecosystem integration: environment resolvers, value processors and
+ * config providers are the types of kariricode/contract, so any
+ * component can supply them without depending on this package.
  *
  * Usage:
  *   $config = ConfigurationBuilder::create()
@@ -39,12 +39,12 @@ use KaririCode\Contract\Environment\EnvironmentResolver;
  *       ->withSchema(['app.name' => 'string', 'app.debug' => 'bool'])
  *       ->build();
  *
- * With Dotenv integration:
+ * With a .env store (kariricode/dotenv 4.5 or later):
  *   $dotenv = new \KaririCode\Dotenv\Dotenv('/app');
  *   $dotenv->load();
  *
  *   $config = ConfigurationBuilder::create()
- *       ->withDotenv($dotenv)
+ *       ->withDotenv(new \KaririCode\Dotenv\Integration\DotenvEnvironmentResolver($dotenv))
  *       ->withDirectory('/app/config')
  *       ->build();
  *
@@ -190,60 +190,33 @@ final class ConfigurationBuilder
     }
 
     /**
-     * Integrates with KaririCode\Dotenv for .env-based interpolation.
+     * Interpolates ${VAR} from a loaded .env store, read through the
+     * contract's EnvironmentResolver, with the process environment as
+     * the fallback for variables the store does not define.
      *
-     * Accepts any object with an all() method that returns loaded
-     * environment variables, or an EnvironmentResolver directly.
+     * kariricode/dotenv 4.5 and later ship the resolver of their store:
      *
-     * This is the recommended way to integrate Dotenv with Configurator.
-     *
-     * Usage:
      *   $dotenv = new \KaririCode\Dotenv\Dotenv('/app');
      *   $dotenv->load();
      *
      *   $config = ConfigurationBuilder::create()
-     *       ->withDotenv($dotenv)
+     *       ->withDotenv(new \KaririCode\Dotenv\Integration\DotenvEnvironmentResolver($dotenv))
      *       ->build();
      *
-     * @param object|EnvironmentResolver $dotenv         Dotenv instance or pre-built resolver
-     * @param bool                                $strict         Throw on undefined vars without defaults
-     * @param bool                                $systemFallback Fall back to system env when Dotenv has no value
-     *
-     * @throws \InvalidArgumentException When $dotenv is neither a resolver nor an object exposing all()
+     * @param bool $strict         Throw on undefined vars without defaults
+     * @param bool $systemFallback Read the process environment when the store has no value
      */
     public function withDotenv(
-        object $dotenv,
+        EnvironmentResolver $resolver,
         bool $strict = true,
         bool $systemFallback = true,
     ): self {
-        if ($dotenv instanceof EnvironmentResolver) {
-            $resolver = $systemFallback
-                ? new Environment\CompositeEnvironmentResolver($dotenv, new Environment\SystemEnvironmentResolver())
-                : $dotenv;
-
-            return $this->withEnvInterpolation($resolver, $strict);
-        }
-
-        if (!method_exists($dotenv, 'all')) {
-            throw new \InvalidArgumentException(
-                sprintf(
-                    'withDotenv() expects a Dotenv instance with all() method '
-                    . 'or an EnvironmentResolver, got %s.',
-                    get_debug_type($dotenv),
-                ),
-            );
-        }
-
-        /** @var array<string, string> $loadedVars */
-        $loadedVars = $dotenv->all();
-
-        $primary = new Environment\InMemoryEnvironmentResolver($loadedVars);
-
-        $resolver = $systemFallback
-            ? new Environment\CompositeEnvironmentResolver($primary, new Environment\SystemEnvironmentResolver())
-            : $primary;
-
-        return $this->withEnvInterpolation($resolver, $strict);
+        return $this->withEnvInterpolation(
+            resolver: $systemFallback
+                ? new CompositeEnvironmentResolver($resolver, new SystemEnvironmentResolver())
+                : $resolver,
+            strict: $strict,
+        );
     }
 
     // ── Sources ───────────────────────────────────────────────────────

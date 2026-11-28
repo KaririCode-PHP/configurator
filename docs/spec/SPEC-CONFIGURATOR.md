@@ -59,7 +59,6 @@ and adds seamless integration with kariricode/dotenv. See ADR-007.
 | ConfigurationProcessor     | Integration | final readonly class   |
 | Psr11Bridge                | Integration | final class            |
 | ReloadableConfiguration    | Decorator   | final class            |
-| DotenvBridge               | Integration | final class            |
 | TomlDefinition             | Enum (internal) | enum (pure)        |
 | Utf8Encoding               | Trait (internal)| trait              |
 | ConfigLoaded               | Event (DPO) | final readonly class   |
@@ -271,34 +270,25 @@ event for cache invalidation and observability.
 | ConfigurationProcessor  | ProcessorInterface (contract 4.x) | Pipeline flow step                                        |
 | Psr11Bridge             | — (returns a factory closure)     | DI container registration                                 |
 | ReloadableConfiguration | (optional PSR-14)                 | Hot reload for long-running processes                     |
-| DotenvBridge            | kariricode/dotenv                 | .env integration shortcut                                 |
 
-### 12.2 Dotenv Integration (V4.2)
+### 12.2 Dotenv Integration (ADR-010)
 
-Three integration paths, ordered by convenience:
+The builder reads a `.env` store through `Environment\EnvironmentResolver`
+of kariricode/contract; kariricode/dotenv 4.5 and later implement it over a
+loaded store:
 
 ```php
-// 1. DotenvBridge (most concise)
-$config = DotenvBridge::configure($dotenv)
-    ->withDirectory('/app/config')
-    ->build();
-
-// 2. withDotenv() on builder
 $config = ConfigurationBuilder::create()
-    ->withDotenv($dotenv)
-    ->withDirectory('/app/config')
-    ->build();
-
-// 3. Explicit resolver (maximum control)
-$resolver = DotenvEnvironmentResolver::fromLoaded($dotenv);
-$config = ConfigurationBuilder::create()
-    ->withEnvInterpolation($resolver, strict: true)
+    ->withDotenv(new DotenvEnvironmentResolver($dotenv))
     ->withDirectory('/app/config')
     ->build();
 ```
 
-withDotenv() accepts any object with all(): array<string, string>
-or an EnvironmentResolverInterface directly.
+withDotenv(EnvironmentResolver $resolver, bool $strict = true,
+bool $systemFallback = true) composes the resolver with
+SystemEnvironmentResolver unless $systemFallback is false: the store's
+values take priority, the process environment fills the gaps.
+withEnvInterpolation() takes a resolver without the fallback.
 
 ### 12.3 Contract Ownership (ADR-007)
 
@@ -347,8 +337,6 @@ are the vocabulary for user implementations of the extension contracts
 | 1202 | ValidationException::typeConstraint()                    | *custom* validators                   |
 | 1300 | MergeException::conflict()                               | *custom* merge strategies             |
 
-Programmer errors — an object without `all()` passed to withDotenv() or
-DotenvEnvironmentResolver::fromLoaded(), or an encryption key that is
-not 32 raw bytes / 64 hex characters — raise SPL
-`InvalidArgumentException` without a code.
+Programmer errors — an encryption key that is not 32 raw bytes / 64 hex
+characters — raise SPL `InvalidArgumentException` without a code.
 

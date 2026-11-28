@@ -29,7 +29,11 @@ use Psr\EventDispatcher\EventDispatcherInterface;
  */
 final readonly class EventDispatcherBridge implements Configurator
 {
-    private Configuration $inner;
+    /**
+     * The decorated configuration, for what the bridge does not expose
+     * (registerLoader(), merge()); loading through it emits no events.
+     */
+    public Configuration $inner;
 
     public function __construct(
         private EventDispatcherInterface $dispatcher,
@@ -115,10 +119,5 @@ final readonly class EventDispatcherBridge implements Configurator
     public function all(): array
     {
         return $this->inner->all();
-    }
-
-    public function getInner(): Configuration
-    {
-        return $this->inner;
     }
 }
