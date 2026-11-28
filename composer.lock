@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "49e28578968a7b59ec17f98aab2bec91",
+    "content-hash": "e8384a39afc6ebf91cd56b2536c5f89e",
     "packages": [
         {
             "name": "kariricode/contract",

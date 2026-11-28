@@ -1,85 +1,97 @@
 # ADR-008: INI and TOML Loaders
 
 ## Status
-Accepted
+
+Accepted — V4.2.0 (decided in the 4.2 line; amended by the 4.2 deep
+review and by ADR-011)
+
+## Date
+
+2026-11-28 — recorded in this layout; the 4.2 tarball did not date the
+decision.
 
 ## Context
-V4.2 adds two configuration formats: INI and TOML. Both are common in
-the PHP and wider tooling ecosystem, and supporting them lets teams
-keep configuration in whatever format their stack already uses.
 
-The constraint is the same as ADR-002: no third-party dependencies.
-INI has a native, well-tested PHP function (`parse_ini_string`); TOML
-does not, so it needs a hand-written parser like the YAML one.
+The 4.2 line adds two formats, INI and TOML, common across PHP and other
+tooling, so teams can keep configuration in the format their stack
+already uses. The constraint is that of ADR-002: no third-party
+dependencies. INI has a native, well-tested PHP function
+(`parse_ini_string`); TOML does not, so it needs a parser of its own.
 
-Configuration TOML files use a limited subset of the TOML 1.0 spec:
-key/value pairs, tables, dotted keys, strings, numbers, booleans,
-arrays, and inline tables. Datetime types, arrays of tables, and
-multi-line strings are rare in configuration and add disproportionate
-parser complexity.
+Configuration TOML uses a subset of TOML 1.0: key/value pairs, tables,
+dotted keys, strings, numbers, booleans, arrays and inline tables.
+Date-time values, arrays of tables and multi-line strings are rare in
+configuration and add disproportionate parser complexity.
+
+### Prior Art
+
+- PHP's `parse_ini_string()` with INI_SCANNER_TYPED.
+- yosymfony/toml and devium/toml: complete TOML parsers, as
+  dependencies.
+- Python's tomllib, used as the reference of the differential tests.
 
 ## Decision
 
-**INI** — wrap the native `parse_ini_string` with `INI_SCANNER_TYPED`
-so values are auto-typed and sections become nested arrays. Dotted
-keys (`database.host = ...`) are expanded into nested structures to
-match the configuration dot-notation model, so a section and a dotted
-key produce the same shape. Parse warnings are converted to a clean
-`LoaderException` through a scoped error handler rather than the `@`
-suppression operator.
+**INI**: wrap `parse_ini_string` with INI_SCANNER_TYPED, so values come
+typed and sections become nested arrays. Dotted keys
+(`database.host = ...`) expand into nested structures, so a section and
+a dotted key give the same shape. Parse warnings become a
+LoaderException through a scoped error handler, never the `@` operator.
 
-**TOML** — implement a built-in subset parser, single-pass and
-line-oriented, mirroring the YAML parser's structure (ADR-002). It
-supports:
-
-  - Key/value pairs, bare and quoted keys, dotted keys
-  - Tables and dotted tables ([a.b.c])
-  - Basic ("...") and literal ('...') strings, with \uXXXX / \UXXXXXXXX
-    escapes decoded to UTF-8 without ext-mbstring
-  - Integers (decimal, hex, octal, binary, with underscores)
-  - Floats (including inf/nan)
-  - Booleans
-  - Arrays (nested, multi-line)
-  - Inline tables ({ a = 1, b = 2 })
-
-Unsupported features are detected and reported through a dedicated
-`ConfigurationException::unsupportedTomlFeature` (error code 1008),
-separate from the YAML feature error, so the message and code name the
-correct format:
-
-  - Arrays of tables ([[table]])
-  - Multi-line strings (""" and ''')
-  - Date/time values
+**TOML**: a built-in subset parser that mirrors the YAML parser: bare,
+quoted and dotted keys; tables; basic and literal strings with
+`\uXXXX`/`\UXXXXXXXX` decoded to UTF-8 without ext-mbstring; integers
+(decimal, hex, octal, binary, with underscores); floats with inf and
+nan; booleans; arrays (nested, multi-line); inline tables. Arrays of
+tables, multi-line strings and date-time values fail with an
+unsupported-feature error of their own, distinct from YAML's, so the
+message and the code name the format.
 
 ## Consequences
-- Two new formats with zero third-party dependencies.
-- Unicode escapes are decoded by a small pure-PHP code-point encoder,
-  so the component gains no ext-mbstring or ext-intl requirement.
-- The TOML subset omits datetime, arrays of tables, and multi-line
-  strings — files needing these should use the PHP format, and the
-  parser fails loudly (not silently) when it sees them.
-- INI has no native nested-array syntax beyond sections and dotted
-  keys, so deep sequences still require PHP/JSON/YAML/TOML.
-- Parser complexity is comparable to the YAML parser and stays within
-  maintainability bounds.
+
+### Positive
+
+- Two formats more, with no runtime dependency and no extension.
+- The parser fails loudly on what it does not support.
+
+### Negative
+
+- Files that need date-times, arrays of tables or multi-line strings use
+  another format.
+- INI has no nested-list syntax beyond sections and dotted keys.
+
+## Alternatives Considered
+
+| Alternative | Why not |
+|---|---|
+| A TOML library | a runtime dependency (ADR-002) for a subset the configurator can parse |
+| Hand-written INI parsing | PHP's parser is native and battle-tested |
+| Full TOML 1.0 | date-times and arrays of tables would double the parser for features configuration rarely uses |
 
 ## Amendment (4.2 deep review)
 
-Differential testing against Python's tomllib showed the first TOML
-parser accepting 15 invalid documents, some with silent data loss
-(`a = 1` followed by `a.b = 2` discarded the value; duplicate keys
-overwrote each other). The parser now enforces TOML 1.0's rules:
-strings must be quoted, numbers follow the TOML grammar and are checked
-for 64-bit overflow, and a definition registry (pure enum
-`TomlDefinition`: Value, DottedTable, HeaderTable, ImplicitTable)
-rejects duplicate keys and tables, extension of values, and dotted keys
-or headers that reopen each other's tables.
+Differential testing against tomllib showed the first TOML parser
+accepting 15 invalid documents, some with silent data loss (`a = 1`
+followed by `a.b = 2` dropped the value; duplicate keys overwrote each
+other). The parser now enforces TOML 1.0's rules: strings must be
+quoted, numbers follow the TOML grammar and are checked for 64-bit
+overflow, and a definition registry (the pure enum `TomlDefinition`)
+rejects duplicate keys and tables, extended values, and dotted keys or
+headers that reopen each other's tables. Parse errors carry the real
+file path and the correct line (line numbers were wrong after
+multi-line arrays). Verification: 33 of 33 documents agree with tomllib
+(17 identical parses, 16 required rejections).
 
-Error reporting: parse errors carry the real file path and the correct
-line (line numbers were wrong after multi-line arrays); only
-`\UnexpectedValueException` is caught internally — the former catch-all
-masked programming errors as parse errors. INI parse warnings are
-converted with `\ErrorException` in a scoped handler.
+## Amendment (ADR-009, ADR-011)
 
-Verification: 33/33 against tomllib (17 identical parses, 16 required
-rejections).
+The definition rules live in `Loader\TomlDocument` (ADR-009). Parse
+errors are LoaderException CFG_2820 and unsupported features CFG_2823
+(they were 1102 and 1008); the parsers raise
+`LoaderException::invalidSyntax()` instead of SPL exceptions, the INI
+loader captures warnings without throwing from its handler, and messages
+no longer repeat values.
+
+## References
+
+- TOML 1.0.0; Python tomllib (differential reference).
+- ADR-002, ADR-009, ADR-011; SPEC-CONFIGURATOR §9.2, §9.3.

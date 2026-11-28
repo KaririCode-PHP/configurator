@@ -44,6 +44,19 @@ final class ArfaConformanceTest extends TestCase
 
     private const int MARKER_WIDTH = 72;
 
+    private const array ADR_SECTIONS = [
+        '## Status',
+        '## Date',
+        '## Context',
+        '## Decision',
+        '## Consequences',
+        '## Alternatives Considered',
+        '## References',
+    ];
+
+    /** Records written before Spec V4.3.3: the changelog's history and the review of the 4.2 tarball. */
+    private const array HISTORICAL_RECORDS = ['CHANGELOG.md', 'docs/DEEP-REVIEW-V4.2.md'];
+
     /** Comment criteria C2–C5 of Spec V4.3.3 §17; C1 is the summary sentence that opens the docblock. */
     private const array COMMENT_MARKERS = ['Preconditions:', 'Thread-safety:', 'Side effects:', 'Example', 'References:'];
 
@@ -398,10 +411,17 @@ final class ArfaConformanceTest extends TestCase
         $composer = self::composer();
 
         self::assertSame(
-            ['arfa' => ['version' => '1.3', 'level' => 1], 'asvs' => ['version' => '5.0', 'level' => 2], 'spec' => '4.3.3'],
+            ['arfa' => ['version' => '1.3', 'level' => 1], 'asvs' => ['version' => '5.0', 'level' => 2], 'spec' => '4.3.3', 'error-code-range' => 'CFG 2800–2899'],
             self::at($composer, 'extra', 'kariricode'),
             'Spec V4.3.3 E-044 and gate G4',
         );
+
+        self::assertSame('^2.11', self::at($composer, 'require', 'kariricode/contract'));
+        self::assertSame('^2.0.2', self::at($composer, 'require', 'kariricode/exception'));
+
+        // Spec V4.3.3 §31: PHP, kariricode/contract, kariricode/exception and PSR interfaces only.
+        $runtime = array_keys((array) self::at($composer, 'require'));
+        self::assertSame([], array_values(array_filter($runtime, static fn(string $package): bool => preg_match('#\A(php|psr/[a-z-]+|kariricode/(contract|exception))\z#', $package) !== 1)));
 
         foreach (['require', 'require-dev', 'suggest'] as $section) {
             self::assertNull(self::at($composer, $section, 'kariricode/framework'), $section);
@@ -445,7 +465,68 @@ final class ArfaConformanceTest extends TestCase
         self::assertGreaterThan(0, $actions);
     }
 
+    // ── Documentation ────────────────────────────────────────────────────
+
+    #[Test]
+    public function documentationFollowsTheCanonicalLayout(): void
+    {
+        $adrs = self::glob('/docs/adr/ADR-*.md');
+        self::assertCount(12, $adrs);
+
+        foreach ($adrs as $path) {
+            $adr = (string) file_get_contents($path);
+
+            foreach (self::ADR_SECTIONS as $section) {
+                self::assertMatchesRegularExpression('/^' . preg_quote($section, '/') . '$/m', $adr, basename($path));
+            }
+        }
+
+        self::assertMatchesRegularExpression('/^- \*\*Status: (PENDING|PASS|FAIL)\*\*/m', self::document('docs/quality/QD-V433-COMPLIANCE.md'));
+
+        foreach (['## Threat Model', '## ASVS 5.0', '## Supply Chain'] as $section) {
+            self::assertStringContainsString($section, self::document('SECURITY.md'));
+        }
+
+        foreach (['## [4.2.0]', '### Spec V4.3.3 conformance (2026-11-28)', '**Breaking**', '**Fixed**'] as $heading) {
+            self::assertStringContainsString($heading, self::document('CHANGELOG.md'));
+        }
+    }
+
+    #[Test]
+    public function documentationAndSourcesCiteTheCurrentSpec(): void
+    {
+        $texts = self::sourceFiles();
+
+        foreach (['README.md', 'SECURITY.md', 'CONTRIBUTING.md', ...self::markdownUnder('docs')] as $relative) {
+            if (!in_array(needle: $relative, haystack: self::HISTORICAL_RECORDS, strict: true)) {
+                $texts[$relative] = self::document($relative);
+            }
+        }
+
+        foreach ($texts as $relative => $text) {
+            self::assertDoesNotMatchRegularExpression('/Spec V4\.0\b|Specification V4\.0\b|Directive V4\.0\b|\bE-013\b/', $text, $relative . ': cite Spec V4.3.3 and its errata numbers');
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /** @return list<string> paths relative to the root */
+    private static function markdownUnder(string $directory): array
+    {
+        $root = (string) realpath(self::ROOT);
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $directory, \FilesystemIterator::SKIP_DOTS));
+
+        foreach ($iterator as $file) {
+            if ($file instanceof \SplFileInfo && $file->getExtension() === 'md') {
+                $files[] = substr($file->getPathname(), strlen($root) + 1);
+            }
+        }
+
+        sort($files);
+
+        return $files;
+    }
 
     /** @return list<string> */
     private static function glob(string $pattern): array

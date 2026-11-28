@@ -1,81 +1,78 @@
 # ADR-007: Ecosystem Contract Promotion
 
 ## Status
-Accepted
+
+Accepted — V4.2.0 (decided in the 4.2 line; the names and the aliases
+are amended by ADR-009 and ADR-010)
+
+## Date
+
+2026-11-28 — recorded in this layout; the 4.2 tarball did not date the
+decision.
 
 ## Context
 
-KaririCode\Configurator V4.1 introduced three contracts as local interfaces:
+The 4.1 line introduced three contracts as local interfaces of the
+configurator: `EnvironmentResolver` (environment resolution),
+`ValueProcessor` (value transformation) and `ConfigProvider` (ecosystem
+self-configuration). Their responsibility spans several components:
 
-- `EnvironmentResolver` — environment variable resolution
-- `ValueProcessor` — configuration value transformation chain
-- `ConfigProvider` — ecosystem self-configuration
+| Contract | Consumers |
+|---|---|
+| EnvironmentResolver | configurator, dotenv, dependency injection, CLI |
+| ValueProcessor | configurator, processor pipeline |
+| ConfigProvider | configurator, cache, logger, queue, authentication |
 
-These contracts were scoped to the Configurator namespace, but their domain responsibility spans multiple ecosystem components:
+Keeping them in the configurator forces every consumer to depend on it,
+against the Dependency Inversion Principle.
 
-| Contract | Consumers | Owner (canonical source) |
-|---|---|---|
-| EnvironmentResolver | Configurator, Dotenv, DI Container, CLI | **Dotenv** (env loading is its job) |
-| ValueProcessor | Configurator, ProcessorPipeline | **Configurator** (config-phase transforms) |
-| ConfigProvider | Configurator, Cache, Logger, Queue, Auth | **Configurator** (config registration) |
+### Prior Art
 
-Keeping contracts local to Configurator creates coupling: any component consuming these interfaces must depend on `kariricode/configurator`, violating the Dependency Inversion Principle.
+- PSR interfaces, published apart from their implementations.
+- kariricode/contract, the ecosystem's package of shared interfaces.
 
 ## Decision
 
-**Promote all three contracts to `kariricode/contract ^4.1`** as ecosystem-level interfaces:
+The three contracts live in kariricode/contract, and the configurator
+types its parameters with them:
 
 ```
-KaririCode\Contract\Environment\EnvironmentResolverInterface
-KaririCode\Contract\Configuration\ValueProcessorInterface
-KaririCode\Contract\Configuration\ConfigProviderInterface
+KaririCode\Contract\Environment\EnvironmentResolver
+KaririCode\Contract\Configuration\ValueProcessor
+KaririCode\Contract\Configuration\ConfigProvider
 ```
 
-Configurator retains local type aliases (via `extends`) for backward compatibility during the 4.x cycle:
-
-```php
-// kariricode/configurator — backward compat alias
-namespace KaririCode\Configurator\Contract;
-
-interface EnvironmentResolver extends \KaririCode\Contract\Environment\EnvironmentResolverInterface {}
-```
+The 4.2 tarball named them with an `Interface` suffix in an unpublished
+contract 4.1 and kept deprecated local aliases; the published contract
+(2.9 and later) has the names above, and no release shipped the aliases,
+so ADR-009 removed them. Dotenv ships its own implementation of
+`EnvironmentResolver` (ADR-010).
 
 ## Consequences
 
 ### Positive
-- **Dotenv** can implement `EnvironmentResolverInterface` without depending on Configurator
-- **ProcessorPipeline** can consume `ValueProcessorInterface` without circular dependency
-- **Any component** can implement `ConfigProviderInterface` to self-declare its config needs
-- Contract ownership follows ARFA 1.3 P2 (Composability): shared contracts live in `kariricode/contract`
+
+- Dotenv implements EnvironmentResolver without depending on the
+  configurator; the processor pipeline consumes ValueProcessor without a
+  cycle; any component declares its configuration through
+  ConfigProvider.
+- Shared contracts live in one package (ARFA 1.3 P2).
 
 ### Negative
-- Existing code using `KaririCode\Configurator\Contract\EnvironmentResolver` continues to work (extends the ecosystem interface), but should migrate to the canonical interface in next major version
 
-### Integration Map
+- A change to one of these interfaces is a change to kariricode/contract
+  and to every implementation in the ecosystem.
 
-```
-kariricode/contract ^4.1
-├── Environment\EnvironmentResolverInterface
-├── Configuration\ValueProcessorInterface
-└── Configuration\ConfigProviderInterface
+## Alternatives Considered
 
-kariricode/dotenv ^4.x
-└── Bridge\DotenvEnvironmentResolver implements EnvironmentResolverInterface
-    └── Exposes loaded .env vars + system fallback
-
-kariricode/configurator ^4.2
-├── Contract\EnvironmentResolver extends EnvironmentResolverInterface (compat alias)
-├── Contract\ValueProcessor extends ValueProcessorInterface (compat alias)
-├── Contract\ConfigProvider extends ConfigProviderInterface (compat alias)
-├── Environment\SystemEnvironmentResolver implements EnvironmentResolverInterface
-├── Environment\InMemoryEnvironmentResolver implements EnvironmentResolverInterface
-├── Processor\EnvironmentProcessor implements ValueProcessorInterface
-├── Processor\TypeCastProcessor implements ValueProcessorInterface
-├── Processor\EncryptedValueProcessor implements ValueProcessorInterface
-└── Integration\DotenvBridge (convenience adapter)
-```
+| Alternative | Why not |
+|---|---|
+| Keep the contracts local | every consumer would depend on the configurator for three interfaces |
+| Move them to kariricode/dotenv | the configurator and other consumers would depend on dotenv |
+| Keep local aliases of the contract names | no release shipped them; an alias of a name nobody used adds an upgrade step (ADR-009) |
 
 ## References
-- ARFA 1.3 §P2: Composability Principle
-- Framework Design Guidelines (Cwalina & Abrams, 3rd ed.) §4.1: Interface Design
-- Dependency Inversion Principle (Martin, SOLID)
+
+- ARFA 1.3 P2; Cwalina and Abrams, Framework Design Guidelines (3rd ed.)
+  §4.1; Martin, the Dependency Inversion Principle.
+- ADR-009, ADR-010.

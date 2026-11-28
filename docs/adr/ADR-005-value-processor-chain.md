@@ -1,39 +1,59 @@
 # ADR-005: Value Processor Chain for Extensible Transformations
 
 ## Status
-Accepted
+
+Accepted — V4.2.0 (decided in the 4.1 line)
+
+## Date
+
+2026-11-28 — recorded in this layout; the 4.x tarballs did not date the
+decision.
 
 ## Context
-Configuration values often require transformations beyond what file
-loaders provide: environment variable interpolation, type casting
-from string representations, decryption of encrypted secrets, and
-domain-specific conversions (URL parsing, DSN decomposition).
 
-Symfony solves this with `EnvVarProcessorInterface` tightly coupled
-to the DI container. Spring Boot uses `@Value` annotations with
-`ConversionService`. Both approaches require framework coupling.
+Configuration values often need transformations the loaders do not
+provide: interpolation, casts from string representations, decryption
+of secrets, and domain conversions (URLs, DSNs).
+
+### Prior Art
+
+- Symfony's `EnvVarProcessorInterface`, tied to the DI container.
+- Spring Boot's `@Value` with a `ConversionService`.
 
 ## Decision
-Implement a **ValueProcessor** contract with a **ValueProcessorChain**
-composite that applies transformations recursively across the entire
-configuration tree at seal() time.
 
-Built-in processors:
-- **EnvironmentProcessor** — `${VAR:default}` interpolation
-- **TypeCastProcessor** — `int:8080`, `bool:true`, `json:{...}`, `csv:a,b`
-- **EncryptedValueProcessor** — `ENC(base64-ciphertext)` decryption
+The `ValueProcessor` contract of kariricode/contract and a
+`ValueProcessorChain` composite apply transformations to every scalar of
+the tree at seal() time, in registration order: each processor whose
+`supports()` accepts the current value transforms it and hands the
+result to the next, so `${PORT}` → `int:8080` → `8080` in one pass.
 
-Chain evaluation order: processors execute in registration order.
-Each processor's `supports()` is called first; only matching processors
-transform the value. Results cascade: processor N's output is input to
-processor N+1, enabling composition (env→typecast→decrypt).
-
-TypeCastProcessor is extensible via `registerCaster(prefix, closure)`,
-allowing domain-specific casters without core modification.
+Built in: EnvironmentProcessor (`${VAR:default}`), TypeCastProcessor
+(`int:`, `bool:`, `json:`, `csv:` and more, extensible through
+`registerCaster()`) and EncryptedValueProcessor (`ENC(...)`, AES-256-GCM).
 
 ## Consequences
-- Zero-dependency transformations — no DI container required
-- Composable: `${PORT}` → `int:8080` → `8080` (int) in single pass
-- Processing happens before validation, so schema checks transformed values
-- Custom processors integrate via the ValueProcessor contract
-- EncryptedValueProcessor uses AES-256-GCM — production-grade security
+
+### Positive
+
+- Transformations need no DI container and compose.
+- Processing runs before validation, so the schema checks the values the
+  application will read.
+
+### Negative
+
+- Order matters: a processor registered before interpolation sees the
+  reference, not its value.
+
+## Alternatives Considered
+
+| Alternative | Why not |
+|---|---|
+| Transform on read | every read would repeat the work, and validation would check raw strings |
+| One processor with a fixed list of features | no extension point for domain conversions |
+| Couple to a DI container's parameter system | the configurator must work without a container |
+
+## References
+
+- ADR-004, ADR-011 (`ProcessorException`, CFG_2830–CFG_2842).
+- SPEC-CONFIGURATOR §6; NIST SP 800-38D.

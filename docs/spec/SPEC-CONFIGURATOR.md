@@ -1,74 +1,79 @@
-# SPEC-CONFIGURATOR: KaririCode\Configurator V4.2
+# SPEC-CONFIGURATOR: KaririCode\Configurator 4.2
 
 ## 1. Overview
 
 Multi-format configuration management with type-safe access,
-environment variable interpolation, value processor chains,
-schema validation, ecosystem self-configuration via providers,
-hot-reload for long-running processes, encrypted value support,
-and first-class Dotenv integration. Zero external dependencies.
+environment variable interpolation, value processor chains, schema
+validation, ecosystem self-configuration via providers, hot reload for
+long-running processes, encrypted values and Dotenv integration, with no
+runtime dependency beyond kariricode/contract and kariricode/exception.
 
-V4.2 promotes contracts to the ecosystem level (kariricode/contract)
-and adds seamless integration with kariricode/dotenv. See ADR-007.
+The shared contracts live in kariricode/contract (ADR-007); Dotenv
+integrates through its EnvironmentResolver (ADR-010); every exception
+carries a code from block 2800–2899 (ADR-011). Conformance: ARFA 1.3
+level 1, KaririCode Specification V4.3.3, OWASP ASVS 5.0 level 2.
 
 ## 2. Contracts
 
-### 2.1 Ecosystem Contracts (kariricode/contract ^4.1)
+### 2.1 Ecosystem Contracts (kariricode/contract ^2.11)
 
-| Interface                     | Package                    | Responsibility                         |
-|-------------------------------|----------------------------|----------------------------------------|
-| EnvironmentResolverInterface  | Contract\Environment       | Env var resolution abstraction         |
-| ValueProcessorInterface       | Contract\Configuration     | Pluggable value transformation         |
-| ConfigProviderInterface       | Contract\Configuration     | Ecosystem component self-configuration |
+| Interface           | Namespace              | Responsibility                         |
+|---------------------|------------------------|----------------------------------------|
+| EnvironmentResolver | Contract\Environment   | Environment variable resolution        |
+| ValueProcessor      | Contract\Configuration | Pluggable value transformation         |
+| ConfigProvider      | Contract\Configuration | Ecosystem component self-configuration |
 
 ### 2.2 Local Contracts
 
-| Interface       | Status              | Responsibility                       |
-|-----------------|---------------------|--------------------------------------|
-| Configurator    | Canonical (local)   | Type-safe dot-notation read access   |
-| Loader          | Canonical (local)   | File parsing (one format per impl)   |
-| MergeStrategy   | Canonical (local)   | Array merge policy                   |
-| ConfigValidator | Canonical (local)   | Schema-based validation              |
-| EnvironmentResolver | @deprecated alias | → EnvironmentResolverInterface   |
-| ValueProcessor  | @deprecated alias   | → ValueProcessorInterface            |
-| ConfigProvider  | @deprecated alias   | → ConfigProviderInterface            |
+| Interface       | Responsibility                       |
+|-----------------|--------------------------------------|
+| Configurator    | Type-safe dot-notation read access   |
+| Loader          | File parsing (one format per impl)   |
+| MergeStrategy   | Array merge policy                   |
+| ConfigValidator | Validation before seal               |
 
 ## 3. Type Taxonomy
 
-| Class                      | Category    | PHP Keyword            |
-|----------------------------|-------------|------------------------|
-| Configuration              | Entity      | final class            |
-| ConfigurationBuilder       | Builder     | final class            |
-| PhpLoader                  | Service     | final readonly class   |
-| JsonLoader                 | Service     | final readonly class   |
-| YamlLoader                 | Service     | final readonly class   |
-| IniLoader                  | Service     | final readonly class   |
-| TomlLoader                 | Service     | final readonly class   |
-| RecursiveMerge             | Service     | final readonly class   |
-| ReplaceMerge               | Service     | final readonly class   |
-| SchemaValidator            | Service     | final readonly class   |
-| EnvironmentProcessor       | Processor   | final readonly class  |
-| TypeCastProcessor          | Processor   | final class            |
-| EncryptedValueProcessor    | Processor   | final readonly class   |
-| ValueProcessorChain        | Composite   | final class            |
-| SystemEnvironmentResolver  | Service     | final readonly class   |
-| InMemoryEnvironmentResolver| Service     | final class            |
-| CompositeEnvironmentResolver| Service    | final readonly class   |
-| CacheBridge                | Integration | final readonly class  |
-| EventDispatcherBridge      | Integration | final readonly class  |
-| ConfigurationProcessor     | Integration | final readonly class   |
-| Psr11Bridge                | Integration | final class            |
-| ReloadableConfiguration    | Decorator   | final class            |
-| TomlDefinition             | Enum (internal) | enum (pure)        |
-| Utf8Encoding               | Trait (internal)| trait              |
-| ConfigLoaded               | Event (DPO) | final readonly class   |
-| ConfigLoadError            | Event (DPO) | final readonly class   |
-| ConfigSealed               | Event (DPO) | final readonly class   |
-| ConfigReloaded             | Event (DPO) | final readonly class   |
-| ConfigurationException     | Exception   | class (extensible)     |
-| LoaderException            | Exception   | final class            |
-| ValidationException        | Exception   | final class            |
-| MergeException             | Exception   | final class            |
+| Class                        | Category         | PHP Keyword          |
+|------------------------------|------------------|----------------------|
+| Configuration                | Entity           | final class          |
+| ConfigurationBuilder         | Builder          | final class          |
+| PhpLoader                    | Service          | final readonly class |
+| JsonLoader                   | Service          | final readonly class |
+| YamlLoader                   | Service          | final readonly class |
+| IniLoader                    | Service          | final readonly class |
+| TomlLoader                   | Service          | final readonly class |
+| TomlDocument                 | Parser state     | final class          |
+| TomlDefinition               | Enum (internal)  | enum (pure)          |
+| Utf8Encoding                 | Trait (internal) | trait                |
+| RecursiveMerge               | Service          | final readonly class |
+| ReplaceMerge                 | Service          | final readonly class |
+| SchemaValidator              | Service          | final readonly class |
+| CompositeValidator           | Composite        | final readonly class |
+| EnvironmentProcessor         | Processor        | final readonly class |
+| TypeCastProcessor            | Processor        | final class          |
+| EncryptedValueProcessor      | Processor        | final readonly class |
+| ValueProcessorChain          | Composite        | final class          |
+| SystemEnvironmentResolver    | Service          | final readonly class |
+| InMemoryEnvironmentResolver  | Service          | final class          |
+| CompositeEnvironmentResolver | Composite        | final readonly class |
+| CacheBridge                  | Integration      | final readonly class |
+| EventDispatcherBridge        | Integration      | final readonly class |
+| ConfigurationProcessor       | Integration      | final readonly class |
+| Psr11Bridge                  | Integration      | final class          |
+| ReloadableConfiguration      | Decorator        | final class          |
+| ConfigLoaded                 | Event (DPO)      | final readonly class |
+| ConfigLoadError              | Event (DPO)      | final readonly class |
+| ConfigSealed                 | Event (DPO)      | final readonly class |
+| ConfigReloaded               | Event (DPO)      | final readonly class |
+| ConfigReloadFailed           | Event (DPO)      | final readonly class |
+| ConfigurationException       | Exception marker | interface            |
+| ConfigCode                   | Error codes      | enum (backed, E-003) |
+| AccessException              | Exception        | final class          |
+| LoaderException              | Exception        | final class          |
+| ProcessorException           | Exception        | final class          |
+| ValidationException          | Exception        | final class          |
+| MergeException               | Exception        | final class          |
 
 ## 4. Schema Validation Format
 
@@ -158,8 +163,8 @@ Algorithm: AES-256-GCM (NIST SP 800-38D)
 ## 7. Config Providers
 
 ```php
-// Ecosystem contract (kariricode/contract)
-interface ConfigProviderInterface {
+// Ecosystem contract (kariricode/contract): Configuration\ConfigProvider
+interface ConfigProvider {
     public function namespace(): string;       // e.g. 'cache'
     public function defaults(): array;         // default values
     public function schema(): array;           // validation schema
@@ -168,6 +173,12 @@ interface ConfigProviderInterface {
 
 Loading priority: Provider defaults → directory files → explicit
 files → programmatic overrides. Higher priority wins on conflicts.
+
+Each provider's schema applies under its namespace. It merges with the
+schema given to withSchema() (the application's entry wins on the same
+path), or runs next to a custom validator through CompositeValidator,
+so a provider's requirements are checked whatever validator the
+application brings.
 
 ## 8. Dot-Notation Resolution
 
@@ -277,7 +288,7 @@ forceReload() rethrow the failure (ADR-012).
 | P2        | Ecosystem contracts in kariricode/contract; Dotenv composability; ConfigurationProcessor for reactive flows |
 | P3        | Environment-aware cascade loading + Dotenv integration  |
 | P4        | Protocol-agnostic (no HTTP/CLI coupling)                |
-| P5        | EventDispatcherBridge + ConfigReloaded events            |
+| P5        | EventDispatcherBridge, ConfigReloaded and ConfigReloadFailed events; coded exceptions (CFG_2800–CFG_2860) |
 
 ## 12. Ecosystem Integration
 
@@ -287,7 +298,7 @@ forceReload() rethrow the failure (ADR-012).
 |-------------------------|-----------------------------------|-----------------------------------------------------------|
 | CacheBridge             | PSR-16 CacheInterface             | Raw-data caching; key = ordered file list + merge strategy |
 | EventDispatcherBridge   | PSR-14 EventDispatcherInterface   | Lifecycle events (observe-and-rethrow on load errors)     |
-| ConfigurationProcessor  | ProcessorInterface (contract 4.x) | Pipeline flow step                                        |
+| ConfigurationProcessor  | Processor (kariricode/contract)   | Pipeline flow step                                        |
 | Psr11Bridge             | — (returns a factory closure)     | DI container registration                                 |
 | ReloadableConfiguration | (optional PSR-14)                 | Hot reload for long-running processes                     |
 
@@ -313,19 +324,16 @@ withEnvInterpolation() takes a resolver without the fallback.
 ### 12.3 Contract Ownership (ADR-007)
 
 ```
-kariricode/contract ^4.1
-├── Environment\EnvironmentResolverInterface   ← canonical
-├── Configuration\ValueProcessorInterface      ← canonical
-└── Configuration\ConfigProviderInterface      ← canonical
+kariricode/contract ^2.11
+├── Environment\EnvironmentResolver
+├── Configuration\ValueProcessor
+└── Configuration\ConfigProvider
 
-kariricode/dotenv ^4.x
-└── Bridge\DotenvEnvironmentResolver           ← implements above
+kariricode/dotenv 4.5+
+└── Integration\DotenvEnvironmentResolver      ← implements EnvironmentResolver
 
-kariricode/configurator ^4.2
-├── Contract\EnvironmentResolver               ← deprecated alias
-├── Contract\ValueProcessor                    ← deprecated alias
-├── Contract\ConfigProvider                    ← deprecated alias
-└── All implementations → typed on ecosystem contracts
+kariricode/configurator 4.2
+└── every implementation and parameter is typed on the contracts above
 ```
 
 ## 13. Error Codes
