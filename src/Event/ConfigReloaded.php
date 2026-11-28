@@ -23,6 +23,5 @@ final readonly class ConfigReloaded
     public function __construct(
         public array $changedFiles,
         public float $reloadTimeMs,
-    ) {
-    }
+    ) {}
 }

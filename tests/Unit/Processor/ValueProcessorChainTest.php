@@ -17,16 +17,16 @@ final class ValueProcessorChainTest extends TestCase
         $chain = new ValueProcessorChain();
         $data = ['key' => 'value', 'nested' => ['a' => 1]];
 
-        $this->assertSame($data, $chain->processArray($data));
+        self::assertSame($data, $chain->processArray($data));
     }
 
     public function testIsEmptyReflectsState(): void
     {
         $chain = new ValueProcessorChain();
-        $this->assertTrue($chain->isEmpty());
+        self::assertTrue($chain->isEmpty());
 
         $chain->add(new TypeCastProcessor());
-        $this->assertFalse($chain->isEmpty());
+        self::assertFalse($chain->isEmpty());
     }
 
     public function testProcessesNestedArrayRecursively(): void
@@ -47,9 +47,9 @@ final class ValueProcessorChainTest extends TestCase
 
         $result = $chain->processArray($data);
 
-        $this->assertSame('prod-db', $result['database']['host']);
-        $this->assertSame(5432, $result['database']['port']);
-        $this->assertSame('prod-db', $result['database']['options']['host_override']);
+        self::assertSame('prod-db', self::at($result, 'database', 'host'));
+        self::assertSame(5432, self::at($result, 'database', 'port'));
+        self::assertSame('prod-db', self::at($result, 'database', 'options', 'host_override'));
     }
 
     public function testChainedProcessors(): void
@@ -63,7 +63,7 @@ final class ValueProcessorChainTest extends TestCase
 
         $result = $chain->processValue('${PORT}');
 
-        $this->assertSame(8080, $result);
+        self::assertSame(8080, $result);
     }
 
     public function testProcessValueSkipsUnsupportedProcessors(): void
@@ -72,8 +72,8 @@ final class ValueProcessorChainTest extends TestCase
         $chain->add(new TypeCastProcessor());
 
         // No ${} pattern, no type: prefix → passes through unchanged
-        $this->assertSame('plain-value', $chain->processValue('plain-value'));
-        $this->assertSame(42, $chain->processValue(42));
+        self::assertSame('plain-value', $chain->processValue('plain-value'));
+        self::assertSame(42, $chain->processValue(42));
     }
 
     public function testPreservesNonScalarValues(): void
@@ -90,9 +90,20 @@ final class ValueProcessorChainTest extends TestCase
 
         $result = $chain->processArray($data);
 
-        $this->assertSame(['a', 'b', 'c'], $result['items']);
-        $this->assertSame(['key' => 'value'], $result['nested']);
-        $this->assertSame(42, $result['number']);
-        $this->assertSame(99, $result['cast_me']);
+        self::assertSame(['a', 'b', 'c'], $result['items']);
+        self::assertSame(['key' => 'value'], $result['nested']);
+        self::assertSame(42, $result['number']);
+        self::assertSame(99, $result['cast_me']);
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
     }
 }

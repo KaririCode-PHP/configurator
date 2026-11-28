@@ -14,6 +14,5 @@ final readonly class ConfigLoaded
 {
     public function __construct(
         public string $filePath,
-    ) {
-    }
+    ) {}
 }

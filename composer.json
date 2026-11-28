@@ -1,6 +1,8 @@
 {
     "name": "kariricode/configurator",
-    "description": "Configuration management for KaririCode Framework — multi-format loading, environment interpolation, value processor chains, encrypted secrets, schema validation, hot reload, and ARFA 1.3 ecosystem integration with zero third-party dependencies",
+    "description": "Configuration for the KaririCode Framework: zero-dependency YAML, TOML, INI, JSON and PHP loaders, recursive merge, ${VAR} interpolation, typed casts and ENC(...) decryption as a value processor chain, schema validation, hot reload and PSR-11, PSR-16 and PSR-14 bridges, for PHP 8.4+.",
+    "type": "library",
+    "license": "MIT",
     "keywords": [
         "configuration",
         "config",
@@ -19,37 +21,35 @@
         "encryption",
         "hot-reload"
     ],
-    "type": "library",
-    "license": "MIT",
     "authors": [
         {
             "name": "Walmir Silva",
-            "email": "walmir.silva@kariricode.org",
-            "homepage": "https://kariricode.org",
-            "role": "Developer"
+            "email": "walmir.silva@kariricode.org"
         }
     ],
-    "homepage": "https://github.com/KaririCode-Framework/kariricode-configurator",
+    "homepage": "https://kariricode.org",
     "support": {
-        "issues": "https://github.com/KaririCode-Framework/kariricode-configurator/issues",
-        "source": "https://github.com/KaririCode-Framework/kariricode-configurator",
-        "docs": "https://kariricode.org/docs/configurator"
+        "issues": "https://github.com/KaririCode-PHP/configurator/issues",
+        "source": "https://github.com/KaririCode-PHP/configurator"
     },
     "require": {
         "php": "^8.4",
-        "kariricode/contract": "^4.1"
+        "kariricode/contract": "^2.11"
     },
     "require-dev": {
-        "kariricode/devkit": "^1.0"
+        "psr/container": "^2.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/simple-cache": "^3.0"
     },
     "suggest": {
         "ext-openssl": "Required to decrypt ENC(...) values (EncryptedValueProcessor, AES-256-GCM)",
-        "psr/simple-cache": "Required by CacheBridge (any PSR-16 implementation)",
-        "psr/event-dispatcher": "Required by EventDispatcherBridge and ReloadableConfiguration events (any PSR-14 dispatcher)",
         "kariricode/cache": "PSR-16 implementation from the KaririCode ecosystem (for CacheBridge)",
-        "kariricode/event-dispatcher": "PSR-14 implementation from the KaririCode ecosystem (for lifecycle events)",
         "kariricode/dotenv": "For .env file integration (DotenvBridge, withDotenv)",
-        "kariricode/processor-pipeline": "For running ConfigurationProcessor inside processing pipelines"
+        "kariricode/event-dispatcher": "PSR-14 implementation from the KaririCode ecosystem (for lifecycle events)",
+        "kariricode/processor-pipeline": "For running ConfigurationProcessor inside processing pipelines",
+        "psr/container": "Required by Psr11Bridge (any PSR-11 container)",
+        "psr/event-dispatcher": "Required by EventDispatcherBridge and ReloadableConfiguration events (any PSR-14 dispatcher)",
+        "psr/simple-cache": "Required by CacheBridge (any PSR-16 implementation)"
     },
     "autoload": {
         "psr-4": {
@@ -61,10 +61,56 @@
             "KaririCode\\Configurator\\Tests\\": "tests/"
         }
     },
+    "scripts": {
+        "test": "kcode test",
+        "test-unit": "kcode test --testsuite=unit,integration",
+        "test-conformance": "kcode test --testsuite=conformance",
+        "phpstan": "kcode run phpstan analyse --no-progress --memory-limit=1G",
+        "psalm": "kcode run psalm --no-cache --show-info=false",
+        "complexity": "@php tools/complexity.php",
+        "mutation": [
+            "Composer\\Config::disableProcessTimeout",
+            "kcode run infection --threads=max --only-covering-test-cases --no-progress --show-mutations=0"
+        ],
+        "security": [
+            "@composer validate --strict",
+            "@composer audit --locked",
+            "@composer audit --locked --working-dir=.kcode",
+            "@php tools/secret-scan.php",
+            "@php tools/secret-scan.php --self-test"
+        ],
+        "sbom": "@php tools/sbom.php sbom.cdx.json",
+        "cs-check": "kcode cs:fix --check",
+        "cs-fix": "kcode cs:fix",
+        "check": [
+            "@cs-check",
+            "@phpstan",
+            "@psalm",
+            "@complexity",
+            "@test",
+            "@mutation"
+        ]
+    },
     "config": {
         "sort-packages": true,
-        "preferred-install": "dist"
+        "optimize-autoloader": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "kariricode": {
+            "arfa": {
+                "version": "1.3",
+                "level": 1
+            },
+            "asvs": {
+                "version": "5.0",
+                "level": 2
+            },
+            "spec": "4.3.3"
+        },
+        "branch-alias": {
+            "dev-main": "4.x-dev"
+        }
+    }
 }

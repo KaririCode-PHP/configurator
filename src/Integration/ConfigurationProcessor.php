@@ -6,7 +6,7 @@ namespace KaririCode\Configurator\Integration;
 
 use KaririCode\Configurator\Configuration;
 use KaririCode\Configurator\ConfigurationBuilder;
-use KaririCode\Contract\Processor\ProcessorInterface;
+use KaririCode\Contract\Processor\Processor;
 
 /**
  * Exposes configuration loading as a ProcessorPipeline step.
@@ -22,12 +22,12 @@ use KaririCode\Contract\Processor\ProcessorInterface;
  *       new CacheProcessor(),
  *   ]);
  *
- * Requires: kariricode/contract (ProcessorInterface)
+ * Requires: kariricode/contract (Processor)
  *
  * @package KaririCode\Configurator
  * @since   4.0.0 ARFA 1.3
  */
-final readonly class ConfigurationProcessor implements ProcessorInterface
+final readonly class ConfigurationProcessor implements Processor
 {
     /**
      * @param string      $configDirectory Base directory for config files
@@ -38,9 +38,9 @@ final readonly class ConfigurationProcessor implements ProcessorInterface
         private string $configDirectory,
         private ?string $environment = null,
         private array $additionalFiles = [],
-    ) {
-    }
+    ) {}
 
+    #[\Override]
     public function process(mixed $input): mixed
     {
         $builder = ConfigurationBuilder::create()

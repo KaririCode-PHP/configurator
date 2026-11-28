@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    phpVersion="8.4"
+    findUnusedCode="false"
+    findUnusedBaselineEntry="false"
+    ensureOverrideAttribute="true"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config .kcode/vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="src"/>
+    </projectFiles>
+    <issueHandlers>
+        <!-- Virtual properties (get-only hooks, PHP 8.4) have no backing store and need no
+             initialization; Psalm 6.19 does not model them. Listed one by one on purpose. -->
+        <PropertyNotSetInConstructor>
+            <errorLevel type="suppress">
+                <referencedProperty name="KaririCode\Configurator\Configuration::$count"/>
+                <referencedProperty name="KaririCode\Configurator\Configuration::$isEmpty"/>
+                <referencedProperty name="KaririCode\Configurator\Configuration::$keys"/>
+            </errorLevel>
+        </PropertyNotSetInConstructor>
+    </issueHandlers>
+</psalm>

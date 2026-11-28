@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Tests\Integration;
 
 use KaririCode\Configurator\ConfigurationBuilder;
-use KaririCode\Configurator\Contract\ConfigProvider;
+use KaririCode\Contract\Configuration\ConfigProvider;
 use KaririCode\Configurator\Environment\InMemoryEnvironmentResolver;
 use PHPUnit\Framework\TestCase;
 
@@ -36,10 +36,10 @@ final class ConfigProviderTest extends TestCase
             ->build();
 
         // User override takes precedence
-        $this->assertSame('redis', $config->getString('cache.driver'));
+        self::assertSame('redis', $config->getString('cache.driver'));
         // Provider default preserved where user didn't override
-        $this->assertSame(3600, $config->getInt('cache.ttl'));
-        $this->assertSame('kc_', $config->getString('cache.prefix'));
+        self::assertSame(3600, $config->getInt('cache.ttl'));
+        self::assertSame('kc_', $config->getString('cache.prefix'));
     }
 
     public function testMultipleProvidersComposed(): void
@@ -83,9 +83,9 @@ final class ConfigProviderTest extends TestCase
             ->withProvider($loggingProvider)
             ->build();
 
-        $this->assertSame('file', $config->getString('cache.driver'));
-        $this->assertSame('info', $config->getString('logging.level'));
-        $this->assertSame('stderr', $config->getString('logging.channel'));
+        self::assertSame('file', $config->getString('cache.driver'));
+        self::assertSame('info', $config->getString('logging.level'));
+        self::assertSame('stderr', $config->getString('logging.channel'));
     }
 
     public function testProviderSchemaValidation(): void
@@ -112,7 +112,7 @@ final class ConfigProviderTest extends TestCase
             ->withProvider($provider)
             ->build();
 
-        $this->assertSame('KaririCode', $config->getString('app.name'));
+        self::assertSame('KaririCode', $config->getString('app.name'));
     }
 
     public function testEnvInterpolationInProviderOverrides(): void
@@ -150,7 +150,7 @@ final class ConfigProviderTest extends TestCase
             ])
             ->build();
 
-        $this->assertSame('redis', $config->getString('cache.driver'));
-        $this->assertSame('7200', $config->getString('cache.ttl'));
+        self::assertSame('redis', $config->getString('cache.driver'));
+        self::assertSame('7200', $config->getString('cache.ttl'));
     }
 }

@@ -6,8 +6,8 @@ namespace KaririCode\Configurator\Processor;
 
 use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
 use KaririCode\Configurator\Exception\ConfigurationException;
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Configuration\ValueProcessor;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * Interpolates environment variable references within string values.
@@ -23,7 +23,7 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * variable without a default value raises ConfigurationException.
  * This prevents silent misconfiguration in production deployments.
  *
- * The resolver can be any EnvironmentResolverInterface implementation:
+ * The resolver can be any EnvironmentResolver implementation:
  *   - SystemEnvironmentResolver (default — $_ENV → $_SERVER → getenv())
  *   - DotenvEnvironmentResolver (from kariricode/dotenv — .env + system)
  *   - InMemoryEnvironmentResolver (testing)
@@ -35,22 +35,24 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * @package KaririCode\Configurator
  * @since   4.1.0 ARFA 1.3
  */
-final readonly class EnvironmentProcessor implements ValueProcessorInterface
+final readonly class EnvironmentProcessor implements ValueProcessor
 {
-    private EnvironmentResolverInterface $resolver;
+    private EnvironmentResolver $resolver;
 
     public function __construct(
-        ?EnvironmentResolverInterface $resolver = null,
+        ?EnvironmentResolver $resolver = null,
         private bool $strict = true,
     ) {
         $this->resolver = $resolver ?? new SystemEnvironmentResolver();
     }
 
+    #[\Override]
     public function supports(mixed $value): bool
     {
         return is_string($value) && str_contains($value, '${');
     }
 
+    #[\Override]
     public function process(mixed $value): mixed
     {
         if (!is_string($value)) {
@@ -183,7 +185,7 @@ final readonly class EnvironmentProcessor implements ValueProcessorInterface
         for ($i = 0; $i < $length; ++$i) {
             $char = $expression[$i];
 
-            if ($char === '$' && $i + 1 < $length && $expression[$i + 1] === '{') {
+            if (substr($expression, $i, 2) === '${') {
                 ++$depth;
                 ++$i; // skip '{'
 
@@ -198,15 +200,13 @@ final readonly class EnvironmentProcessor implements ValueProcessorInterface
 
             // Colon separator at top level → marks default value boundary
             if ($char === ':' && $depth === 0) {
-                $name = substr($expression, 0, $i);
                 $default = substr($expression, $i + 1);
 
                 // Strip optional leading '-' (bash :-default syntax)
-                if ($default !== '' && $default[0] === '-') {
-                    $default = substr($default, 1);
-                }
-
-                return ['name' => $name, 'default' => $default];
+                return [
+                    'name' => substr($expression, 0, $i),
+                    'default' => str_starts_with($default, '-') ? substr($default, 1) : $default,
+                ];
             }
         }
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace KaririCode\Configurator\Tests\Conformance;
+namespace KaririCode\Configurator\Tests\Unit\Loader;
 
 use KaririCode\Configurator\Exception\ConfigurationException;
 use KaririCode\Configurator\Exception\LoaderException;
@@ -32,7 +32,7 @@ final class YamlEdgeCasesTest extends TestCase
             return;
         }
 
-        array_map('unlink', glob($this->fixtureDir . '/*') ?: []);
+        array_map('unlink', self::filesIn($this->fixtureDir . '/*'));
         rmdir($this->fixtureDir);
     }
 
@@ -107,25 +107,25 @@ final class YamlEdgeCasesTest extends TestCase
     public function testEmptyFileReturnsEmptyArray(): void
     {
         $this->writeFixture('empty.yaml', '');
-        $this->assertSame([], $this->loader->load($this->fixtureDir . '/empty.yaml'));
+        self::assertSame([], $this->loader->load($this->fixtureDir . '/empty.yaml'));
     }
 
     public function testCommentOnlyFileReturnsEmptyArray(): void
     {
         $this->writeFixture('comments.yaml', "# This is a comment\n# Another comment\n");
-        $this->assertSame([], $this->loader->load($this->fixtureDir . '/comments.yaml'));
+        self::assertSame([], $this->loader->load($this->fixtureDir . '/comments.yaml'));
     }
 
     public function testDocumentMarkersAreSkipped(): void
     {
         $this->writeFixture('markers.yaml', "---\nkey: value\n...\n");
-        $this->assertSame(['key' => 'value'], $this->loader->load($this->fixtureDir . '/markers.yaml'));
+        self::assertSame(['key' => 'value'], $this->loader->load($this->fixtureDir . '/markers.yaml'));
     }
 
     public function testUtf8BomIsStripped(): void
     {
         $this->writeFixture('bom.yaml', "\xEF\xBB\xBFkey: value\n");
-        $this->assertSame(['key' => 'value'], $this->loader->load($this->fixtureDir . '/bom.yaml'));
+        self::assertSame(['key' => 'value'], $this->loader->load($this->fixtureDir . '/bom.yaml'));
     }
 
     public function testDeepNesting(): void
@@ -141,7 +141,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('deep.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/deep.yaml');
 
-        $this->assertSame('deep', $result['level1']['level2']['level3']['level4']['value']);
+        self::assertSame('deep', self::at($result, 'level1', 'level2', 'level3', 'level4', 'value'));
     }
 
     public function testMixedScalarTypes(): void
@@ -160,14 +160,14 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('scalars.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/scalars.yaml');
 
-        $this->assertSame('hello', $result['string']);
-        $this->assertSame(42, $result['int']);
-        $this->assertSame(3.14, $result['float']);
-        $this->assertTrue($result['bool_true']);
-        $this->assertFalse($result['bool_false']);
-        $this->assertNull($result['null_tilde']);
-        $this->assertNull($result['null_word']);
-        $this->assertSame(255, $result['hex']);
+        self::assertSame('hello', $result['string']);
+        self::assertSame(42, $result['int']);
+        self::assertSame(3.14, $result['float']);
+        self::assertTrue($result['bool_true']);
+        self::assertFalse($result['bool_false']);
+        self::assertNull($result['null_tilde']);
+        self::assertNull($result['null_word']);
+        self::assertSame(255, $result['hex']);
     }
 
     public function testQuotedStringsPreservedAsStrings(): void
@@ -182,10 +182,10 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('quoted.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/quoted.yaml');
 
-        $this->assertSame('true', $result['quoted_true']);
-        $this->assertSame('42', $result['quoted_int']);
-        $this->assertSame('null', $result['quoted_null']);
-        $this->assertSame('hello world', $result['single_quoted']);
+        self::assertSame('true', $result['quoted_true']);
+        self::assertSame('42', $result['quoted_int']);
+        self::assertSame('null', $result['quoted_null']);
+        self::assertSame('hello world', $result['single_quoted']);
     }
 
     public function testFlowSequence(): void
@@ -194,7 +194,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('flow_seq.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/flow_seq.yaml');
 
-        $this->assertSame(['a', 'b', 'c', 1, true], $result['items']);
+        self::assertSame(['a', 'b', 'c', 1, true], $result['items']);
     }
 
     public function testFlowMapping(): void
@@ -203,7 +203,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('flow_map.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/flow_map.yaml');
 
-        $this->assertSame(['host' => 'localhost', 'port' => 3306], $result['config']);
+        self::assertSame(['host' => 'localhost', 'port' => 3306], $result['config']);
     }
 
     public function testBlockSequence(): void
@@ -218,7 +218,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('block_seq.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/block_seq.yaml');
 
-        $this->assertSame(['auth', 'cors', 'logging'], $result['middleware']);
+        self::assertSame(['auth', 'cors', 'logging'], $result['middleware']);
     }
 
     public function testLiteralBlockScalar(): void
@@ -228,7 +228,7 @@ final class YamlEdgeCasesTest extends TestCase
         $result = $this->loader->load($this->fixtureDir . '/literal.yaml');
 
         // Clip chomping (YAML 1.2, section 8.1.1.2): one final line break.
-        $this->assertSame("Line one\nLine two\nLine three\n", $result['description']);
+        self::assertSame("Line one\nLine two\nLine three\n", $result['description']);
     }
 
     public function testFoldedBlockScalar(): void
@@ -237,7 +237,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('folded.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/folded.yaml');
 
-        $this->assertSame("This is a long description that wraps.\n", $result['description']);
+        self::assertSame("This is a long description that wraps.\n", $result['description']);
     }
 
     public function testInlineCommentStripping(): void
@@ -246,8 +246,8 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('inline_comments.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/inline_comments.yaml');
 
-        $this->assertSame('value', $result['key']);
-        $this->assertSame(42, $result['other']);
+        self::assertSame('value', $result['key']);
+        self::assertSame(42, $result['other']);
     }
 
     public function testQuotedStringWithHash(): void
@@ -256,7 +256,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('hash_in_string.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/hash_in_string.yaml');
 
-        $this->assertSame('#ff0000', $result['color']);
+        self::assertSame('#ff0000', $result['color']);
     }
 
     public function testColonInQuotedValue(): void
@@ -265,7 +265,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('colon_quoted.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/colon_quoted.yaml');
 
-        $this->assertSame('https://example.com:8080', $result['url']);
+        self::assertSame('https://example.com:8080', $result['url']);
     }
 
     public function testNestedSequenceOfMappings(): void
@@ -283,9 +283,9 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('seq_of_maps.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/seq_of_maps.yaml');
 
-        $this->assertCount(2, $result['servers']);
-        $this->assertSame('server1', $result['servers'][0]['host']);
-        $this->assertSame(443, $result['servers'][1]['port']);
+        self::assertCount(2, (array) $result['servers']);
+        self::assertSame('server1', self::at($result, 'servers', 0, 'host'));
+        self::assertSame(443, self::at($result, 'servers', 1, 'port'));
     }
 
     public function testSpecialFloatValues(): void
@@ -299,9 +299,9 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('special_floats.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/special_floats.yaml');
 
-        $this->assertSame(INF, $result['pos_inf']);
-        $this->assertSame(-INF, $result['neg_inf']);
-        $this->assertNan($result['not_a_number']);
+        self::assertSame(INF, $result['pos_inf']);
+        self::assertSame(-INF, $result['neg_inf']);
+        self::assertNan($result['not_a_number']);
     }
 
     public function testBinaryAndOctalIntegers(): void
@@ -319,12 +319,12 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('radix_ints.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/radix_ints.yaml');
 
-        $this->assertSame(10, $result['binary']);
-        $this->assertSame(15, $result['octal']);
-        $this->assertSame(-5, $result['neg_binary']);
-        $this->assertSame(255, $result['hex']);
+        self::assertSame(10, $result['binary']);
+        self::assertSame(15, $result['octal']);
+        self::assertSame(-5, $result['neg_binary']);
+        self::assertSame(255, $result['hex']);
         // YAML 1.2: a leading zero is decimal, not octal.
-        $this->assertSame(755, $result['leading_zero']);
+        self::assertSame(755, $result['leading_zero']);
     }
 
     public function testEmptyFlowCollections(): void
@@ -333,8 +333,8 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('empty_flow.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/empty_flow.yaml');
 
-        $this->assertSame([], $result['empty_list']);
-        $this->assertSame([], $result['empty_map']);
+        self::assertSame([], $result['empty_list']);
+        self::assertSame([], $result['empty_map']);
     }
 
     public function testNestedFlowCollections(): void
@@ -343,7 +343,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('nested_flow.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/nested_flow.yaml');
 
-        $this->assertSame([[1, 2], [3, 4]], $result['matrix']);
+        self::assertSame([[1, 2], [3, 4]], $result['matrix']);
     }
 
     public function testAsteriskInQuotedStringDoesNotTriggerAliasDetection(): void
@@ -352,7 +352,7 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('glob_pattern.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/glob_pattern.yaml');
 
-        $this->assertSame('*.log', $result['pattern']);
+        self::assertSame('*.log', $result['pattern']);
     }
 
     public function testEnvVarPlaceholderSurvivesParsing(): void
@@ -366,8 +366,8 @@ final class YamlEdgeCasesTest extends TestCase
         $this->writeFixture('env_placeholders.yaml', $yaml);
         $result = $this->loader->load($this->fixtureDir . '/env_placeholders.yaml');
 
-        $this->assertSame('${DB_HOST:localhost}', $result['database']['host']);
-        $this->assertSame('${DB_PORT:5432}', $result['database']['port']);
+        self::assertSame('${DB_HOST:localhost}', self::at($result, 'database', 'host'));
+        self::assertSame('${DB_PORT:5432}', self::at($result, 'database', 'port'));
     }
 
     // ── Utility ───────────────────────────────────────────────────────
@@ -378,38 +378,38 @@ final class YamlEdgeCasesTest extends TestCase
     {
         $result = $this->parseYaml("servers:\n  - host: a\n    port: 1\n  - host: b\n    port: 2\n");
 
-        $this->assertSame([['host' => 'a', 'port' => 1], ['host' => 'b', 'port' => 2]], $result['servers']);
+        self::assertSame([['host' => 'a', 'port' => 1], ['host' => 'b', 'port' => 2]], $result['servers']);
     }
 
     public function testSequenceAtParentKeyIndentation(): void
     {
         $result = $this->parseYaml("middleware:\n- auth\n- cors\nnext: 1\n");
 
-        $this->assertSame(['middleware' => ['auth', 'cors'], 'next' => 1], $result);
+        self::assertSame(['middleware' => ['auth', 'cors'], 'next' => 1], $result);
     }
 
     public function testNestedSequenceInsideMappingItem(): void
     {
         $result = $this->parseYaml("jobs:\n  - name: build\n    steps:\n      - checkout\n      - test\n");
 
-        $this->assertSame([['name' => 'build', 'steps' => ['checkout', 'test']]], $result['jobs']);
+        self::assertSame([['name' => 'build', 'steps' => ['checkout', 'test']]], $result['jobs']);
     }
 
     public function testSequenceOfSequencesOnDashLine(): void
     {
         $result = $this->parseYaml("m:\n  - - 1\n    - 2\n  - - 3\n");
 
-        $this->assertSame([[1, 2], [3]], $result['m']);
+        self::assertSame([[1, 2], [3]], $result['m']);
     }
 
     public function testTopLevelSequence(): void
     {
-        $this->assertSame(['a', ['b' => 1, 'c' => 2]], $this->parseYaml("- a\n- b: 1\n  c: 2\n"));
+        self::assertSame(['a', ['b' => 1, 'c' => 2]], $this->parseYaml("- a\n- b: 1\n  c: 2\n"));
     }
 
     public function testIndentedCommentIsNotAKey(): void
     {
-        $this->assertSame(['a' => ['b' => 1]], $this->parseYaml("a:\n  # note: not a key\n  b: 1\n"));
+        self::assertSame(['a' => ['b' => 1]], $this->parseYaml("a:\n  # note: not a key\n  b: 1\n"));
     }
 
     // ── Block Scalar Regressions ──────────────────────────────────────
@@ -418,31 +418,31 @@ final class YamlEdgeCasesTest extends TestCase
     {
         $result = $this->parseYaml("script: |\n  #!/bin/bash\n\n  echo hi\nnext: x\n");
 
-        $this->assertSame("#!/bin/bash\n\necho hi\n", $result['script']);
-        $this->assertSame('x', $result['next']);
+        self::assertSame("#!/bin/bash\n\necho hi\n", $result['script']);
+        self::assertSame('x', $result['next']);
     }
 
     public function testStripChompingIndicators(): void
     {
         $result = $this->parseYaml("a: |-\n  keep\n  this\nb: >-\n  one\n  two\n");
 
-        $this->assertSame("keep\nthis", $result['a']);
-        $this->assertSame('one two', $result['b']);
+        self::assertSame("keep\nthis", $result['a']);
+        self::assertSame('one two', $result['b']);
     }
 
     public function testKeepChompingIndicator(): void
     {
-        $this->assertSame("x\n\n", $this->parseYaml("a: |+\n  x\n\nb: 1\n")['a']);
+        self::assertSame("x\n\n", $this->parseYaml("a: |+\n  x\n\nb: 1\n")['a']);
     }
 
     public function testExplicitIndentationIndicator(): void
     {
-        $this->assertSame("  indented\nbase\n", $this->parseYaml("a: |2\n    indented\n  base\n")['a']);
+        self::assertSame("  indented\nbase\n", $this->parseYaml("a: |2\n    indented\n  base\n")['a']);
     }
 
     public function testFoldedBlockKeepsParagraphs(): void
     {
-        $this->assertSame("p1 l1 p1 l2\np2\n", $this->parseYaml("a: >\n  p1 l1\n  p1 l2\n\n  p2\n")['a']);
+        self::assertSame("p1 l1 p1 l2\np2\n", $this->parseYaml("a: >\n  p1 l1\n  p1 l2\n\n  p2\n")['a']);
     }
 
     // ── Scalar and Flow Regressions ───────────────────────────────────
@@ -451,30 +451,30 @@ final class YamlEdgeCasesTest extends TestCase
     {
         $result = $this->parseYaml("paths: [\"C:\\\\\", \"D:\\\\\"]\np: \"C:\\\\\" # win\n");
 
-        $this->assertSame(['C:\\', 'D:\\'], $result['paths']);
-        $this->assertSame('C:\\', $result['p']);
+        self::assertSame(['C:\\', 'D:\\'], $result['paths']);
+        self::assertSame('C:\\', $result['p']);
     }
 
     public function testDoubleQuotedUnicodeEscapes(): void
     {
-        $this->assertSame('café A 🔐', $this->parseYaml('a: "caf\\u00e9 \\x41 \\U0001F510"' . "\n")['a']);
+        self::assertSame('café A 🔐', $this->parseYaml('a: "caf\\u00e9 \\x41 \\U0001F510"' . "\n")['a']);
     }
 
     public function testApostropheInPlainScalarDoesNotHideComment(): void
     {
-        $this->assertSame("it's fine", $this->parseYaml("msg: it's fine # c\n")['msg']);
+        self::assertSame("it's fine", $this->parseYaml("msg: it's fine # c\n")['msg']);
     }
 
     public function testMultiLineFlowCollection(): void
     {
-        $this->assertSame([80, 443], $this->parseYaml("ports: [\n  80,\n  443, # https\n]\n")['ports']);
+        self::assertSame([80, 443], $this->parseYaml("ports: [\n  80,\n  443, # https\n]\n")['ports']);
     }
 
     public function testMultiLinePlainScalarIsFolded(): void
     {
         $result = $this->parseYaml("desc: this is a long\n  description text\nnext: 1\n");
 
-        $this->assertSame('this is a long description text', $result['desc']);
+        self::assertSame('this is a long description text', $result['desc']);
     }
 
     // ── Failing Loudly ────────────────────────────────────────────────
@@ -520,5 +520,24 @@ final class YamlEdgeCasesTest extends TestCase
         }
 
         file_put_contents($this->fixtureDir . '/' . $filename, $content);
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
+    }
+
+    /** @return list<string> */
+    private static function filesIn(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
     }
 }

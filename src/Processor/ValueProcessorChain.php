@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Processor;
 
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
+use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
  * Applies a chain of ValueProcessors to configuration data recursively.
@@ -22,10 +22,10 @@ use KaririCode\Contract\Configuration\ValueProcessorInterface;
  */
 final class ValueProcessorChain
 {
-    /** @var list<ValueProcessorInterface> */
+    /** @var list<ValueProcessor> */
     private array $processors = [];
 
-    public function add(ValueProcessorInterface $processor): self
+    public function add(ValueProcessor $processor): self
     {
         $this->processors[] = $processor;
 
@@ -44,6 +44,7 @@ final class ValueProcessorChain
     {
         foreach ($this->processors as $processor) {
             if ($processor->supports($value)) {
+                /** @var mixed $value a processor may return any value */
                 $value = $processor->process($value);
             }
         }
@@ -81,18 +82,9 @@ final class ValueProcessorChain
      */
     private function walk(array $data): array
     {
-        $result = [];
-
-        foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $result[$key] = $this->walk($value);
-
-                continue;
-            }
-
-            $result[$key] = $this->processValue($value);
-        }
-
-        return $result;
+        return array_map(
+            fn(mixed $value): mixed => is_array($value) ? $this->walk($value) : $this->processValue($value),
+            $data,
+        );
     }
 }

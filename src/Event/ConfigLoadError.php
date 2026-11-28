@@ -15,6 +15,5 @@ final readonly class ConfigLoadError
     public function __construct(
         public string $filePath,
         public \Throwable $exception,
-    ) {
-    }
+    ) {}
 }

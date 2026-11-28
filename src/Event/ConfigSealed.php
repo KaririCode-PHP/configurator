@@ -17,6 +17,5 @@ final readonly class ConfigSealed
      */
     public function __construct(
         public array $keys,
-    ) {
-    }
+    ) {}
 }

@@ -16,7 +16,7 @@ final class PhpLoaderTest extends TestCase
     protected function setUp(): void
     {
         $this->loader = new PhpLoader();
-        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/Config';
     }
 
     public function testLoadsValidPhpConfig(): void
@@ -25,7 +25,7 @@ final class PhpLoaderTest extends TestCase
 
         self::assertIsArray($data);
         self::assertArrayHasKey('app', $data);
-        self::assertSame('TestApp', $data['app']['name']);
+        self::assertSame('TestApp', self::at($data, 'app', 'name'));
     }
 
     public function testThrowsForNonExistentFile(): void
@@ -41,7 +41,7 @@ final class PhpLoaderTest extends TestCase
         $this->expectException(LoaderException::class);
         $this->expectExceptionCode(1103);
 
-        $this->loader->load(dirname(__DIR__, 2) . '/Fixture/invalid/invalid_return.php');
+        $this->loader->load(dirname(__DIR__, 2) . '/Fixture/Invalid/invalid_return.php');
     }
 
     public function testSupportsPhpExtension(): void
@@ -57,5 +57,16 @@ final class PhpLoaderTest extends TestCase
         // inside the included file. This test confirms isolation.
         $data = $this->loader->load($this->fixturesPath . '/app.php');
         self::assertIsArray($data);
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
     }
 }

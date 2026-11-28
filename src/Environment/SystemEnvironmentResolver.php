@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Environment;
 
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * Resolves environment variables from PHP runtime sources.
@@ -23,8 +23,9 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * @package KaririCode\Configurator
  * @since   4.1.0 ARFA 1.3
  */
-final readonly class SystemEnvironmentResolver implements EnvironmentResolverInterface
+final readonly class SystemEnvironmentResolver implements EnvironmentResolver
 {
+    #[\Override]
     public function get(string $name): ?string
     {
         $value = $this->scalarToString($_ENV[$name] ?? null)
@@ -34,6 +35,7 @@ final readonly class SystemEnvironmentResolver implements EnvironmentResolverInt
         return $value !== false ? $value : null;
     }
 
+    #[\Override]
     public function has(string $name): bool
     {
         return $this->get($name) !== null;

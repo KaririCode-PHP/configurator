@@ -30,27 +30,27 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertTrue($processor->supports('${DB_HOST}'));
-        $this->assertTrue($processor->supports('host: ${DB_HOST}'));
+        self::assertTrue($processor->supports('${DB_HOST}'));
+        self::assertTrue($processor->supports('host: ${DB_HOST}'));
     }
 
     public function testDoesNotSupportNonStrings(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertFalse($processor->supports(42));
-        $this->assertFalse($processor->supports(true));
-        $this->assertFalse($processor->supports(null));
-        $this->assertFalse($processor->supports([]));
+        self::assertFalse($processor->supports(42));
+        self::assertFalse($processor->supports(true));
+        self::assertFalse($processor->supports(null));
+        self::assertFalse($processor->supports([]));
     }
 
     public function testDoesNotSupportStringWithoutPlaceholder(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertFalse($processor->supports('localhost'));
-        $this->assertFalse($processor->supports('$DB_HOST'));
-        $this->assertFalse($processor->supports('{DB_HOST}'));
+        self::assertFalse($processor->supports('localhost'));
+        self::assertFalse($processor->supports('$DB_HOST'));
+        self::assertFalse($processor->supports('{DB_HOST}'));
     }
 
     // ── Simple interpolation ──────────────────────────────────────────
@@ -59,14 +59,14 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame('db.prod.example.com', $processor->process('${DB_HOST}'));
+        self::assertSame('db.prod.example.com', $processor->process('${DB_HOST}'));
     }
 
     public function testResolvesMultipleVariablesInString(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame(
+        self::assertSame(
             'pgsql://db.prod.example.com:5432',
             $processor->process('pgsql://${DB_HOST}:${DB_PORT}'),
         );
@@ -76,7 +76,7 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame(
+        self::assertSame(
             'host=db.prod.example.com;port=5432',
             $processor->process('host=${DB_HOST};port=${DB_PORT}'),
         );
@@ -88,28 +88,28 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame('localhost', $processor->process('${UNDEFINED_VAR:localhost}'));
+        self::assertSame('localhost', $processor->process('${UNDEFINED_VAR:localhost}'));
     }
 
     public function testBashStyleDefaultWithDash(): void
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame('fallback', $processor->process('${UNDEFINED_VAR:-fallback}'));
+        self::assertSame('fallback', $processor->process('${UNDEFINED_VAR:-fallback}'));
     }
 
     public function testDefinedVariableIgnoresDefault(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame('db.prod.example.com', $processor->process('${DB_HOST:localhost}'));
+        self::assertSame('db.prod.example.com', $processor->process('${DB_HOST:localhost}'));
     }
 
     public function testEmptyDefaultIsValid(): void
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame('', $processor->process('${MISSING:}'));
+        self::assertSame('', $processor->process('${MISSING:}'));
     }
 
     // ── Strict mode ───────────────────────────────────────────────────
@@ -128,14 +128,14 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: true);
 
-        $this->assertSame('fallback', $processor->process('${UNDEFINED_VAR:fallback}'));
+        self::assertSame('fallback', $processor->process('${UNDEFINED_VAR:fallback}'));
     }
 
     public function testNonStrictReturnsEmptyForUndefined(): void
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame('', $processor->process('${UNDEFINED_VAR}'));
+        self::assertSame('', $processor->process('${UNDEFINED_VAR}'));
     }
 
     // ── Nested defaults ───────────────────────────────────────────────
@@ -145,7 +145,7 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
         // ${MISSING:${ALSO_MISSING:final_default}}
-        $this->assertSame(
+        self::assertSame(
             'final_default',
             $processor->process('${MISSING:${ALSO_MISSING:final_default}}'),
         );
@@ -156,7 +156,7 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver);
 
         // ${MISSING:${DB_HOST}} → resolves MISSING fails, then DB_HOST resolves
-        $this->assertSame(
+        self::assertSame(
             'db.prod.example.com',
             $processor->process('${MISSING:${DB_HOST}}'),
         );
@@ -167,7 +167,7 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
         // ${A:${B:${C:deep}}} → all undefined → "deep"
-        $this->assertSame(
+        self::assertSame(
             'deep',
             $processor->process('${A:${B:${C:deep}}}'),
         );
@@ -178,7 +178,7 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver);
 
         // ${MISSING:${DB_HOST:${C:deep}}} → DB_HOST resolves
-        $this->assertSame(
+        self::assertSame(
             'db.prod.example.com',
             $processor->process('${MISSING:${DB_HOST:${C:deep}}}'),
         );
@@ -188,7 +188,7 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame(
+        self::assertSame(
             'host=fallback;port=5432',
             $processor->process('host=${MISSING:fallback};port=${DB_PORT}'),
         );
@@ -198,7 +198,7 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
-        $this->assertSame(
+        self::assertSame(
             'prefix_final_default_suffix',
             $processor->process('prefix_${A:${B:final_default}}_suffix'),
         );
@@ -210,14 +210,14 @@ final class EnvironmentProcessorTest extends TestCase
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame('', $processor->process('${EMPTY_VAR}'));
+        self::assertSame('', $processor->process('${EMPTY_VAR}'));
     }
 
     public function testNonStringInputPassesThrough(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame(42, $processor->process(42));
+        self::assertSame(42, $processor->process(42));
     }
 
     public function testDefaultsToSystemEnvironment(): void
@@ -227,14 +227,14 @@ final class EnvironmentProcessorTest extends TestCase
 
         // Should not throw — uses system resolver
         $result = $processor->process('${VERY_UNLIKELY_VAR_NAME_12345}');
-        $this->assertSame('', $result);
+        self::assertSame('', $result);
     }
 
     public function testAdjacentPlaceholders(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame(
+        self::assertSame(
             'db.prod.example.com5432',
             $processor->process('${DB_HOST}${DB_PORT}'),
         );
@@ -245,14 +245,14 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
         // Unbalanced — no closing brace → literal output
-        $this->assertSame('${UNCLOSED', $processor->process('${UNCLOSED'));
+        self::assertSame('${UNCLOSED', $processor->process('${UNCLOSED'));
     }
 
     public function testDollarSignWithoutBraceIsLiteral(): void
     {
         $processor = new EnvironmentProcessor($this->resolver);
 
-        $this->assertSame('price is $5', $processor->process('price is $5'));
+        self::assertSame('price is $5', $processor->process('price is $5'));
     }
 
     public function testEmptyPlaceholderNonStrict(): void
@@ -260,7 +260,7 @@ final class EnvironmentProcessorTest extends TestCase
         $processor = new EnvironmentProcessor($this->resolver, strict: false);
 
         // ${} — empty name, resolver returns null
-        $this->assertSame('', $processor->process('${}'));
+        self::assertSame('', $processor->process('${}'));
     }
 
     public function testResolvedValueContainingColon(): void
@@ -270,7 +270,7 @@ final class EnvironmentProcessorTest extends TestCase
         ]);
         $processor = new EnvironmentProcessor($resolver);
 
-        $this->assertSame(
+        self::assertSame(
             'pgsql:host=localhost:5432',
             $processor->process('${DSN}'),
         );

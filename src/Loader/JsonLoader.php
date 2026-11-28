@@ -19,6 +19,7 @@ use KaririCode\Configurator\Exception\LoaderException;
  */
 final readonly class JsonLoader implements Loader
 {
+    #[\Override]
     public function load(string $path): array
     {
         if (!is_file($path) || !is_readable($path)) {
@@ -44,6 +45,7 @@ final readonly class JsonLoader implements Loader
         return $data;
     }
 
+    #[\Override]
     public function supports(string $extension): bool
     {
         return $extension === 'json';

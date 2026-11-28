@@ -16,7 +16,7 @@ final class ConfigurationTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->fixturesPath = dirname(__DIR__) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__) . '/Fixture/Config';
     }
 
     // ── Loading ───────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ final class ConfigurationTest extends TestCase
             ->load($this->fixturesPath . '/services.json')
             ->seal();
 
-        self::assertInstanceOf(Configuration::class, $result);
+        self::assertSame($config, $result);
         self::assertSame('TestApp', $config->get('app.name'));
         self::assertSame('smtp', $config->get('services.mailer.transport'));
     }
@@ -337,8 +337,16 @@ final class ConfigurationTest extends TestCase
             self::assertSame('from_ini', $config->get('app.name'));
             self::assertSame(5432, $config->get('db.port'));
         } finally {
-            array_map('unlink', glob($dir . '/*') ?: []);
+            array_map('unlink', self::filesIn($dir . '/*'));
             rmdir($dir);
         }
+    }
+
+    /** @return list<string> */
+    private static function filesIn(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
     }
 }

@@ -32,26 +32,12 @@ final readonly class SchemaValidator implements ConfigValidator
 {
     // ── Type Map ──────────────────────────────────────────────────────
 
-    private const array TYPE_CHECKS = [
-        'string' => 'is_string',
-        'int' => 'is_int',
-        'integer' => 'is_int',
-        'float' => 'is_float',
-        'double' => 'is_float',
-        'bool' => 'is_bool',
-        'boolean' => 'is_bool',
-        'array' => 'is_array',
-        'numeric' => 'is_numeric',
-        'scalar' => 'is_scalar',
-    ];
-
     /**
      * @param array<string, string> $schema Dot-notation path → type descriptor
      */
     public function __construct(
         private array $schema,
-    ) {
-    }
+    ) {}
 
     /**
      * Returns the raw schema for introspection or merging.
@@ -63,6 +49,7 @@ final readonly class SchemaValidator implements ConfigValidator
         return $this->schema;
     }
 
+    #[\Override]
     public function validate(array $data): void
     {
         $violations = [];
@@ -71,6 +58,7 @@ final readonly class SchemaValidator implements ConfigValidator
             $nullable = str_starts_with($typeDescriptor, '?');
             $type = $nullable ? substr($typeDescriptor, 1) : $typeDescriptor;
 
+            /** @var mixed $value configuration leaves are untyped; checked below. */
             $value = $this->resolve($data, $path);
 
             // Required check (non-nullable keys must exist)
@@ -109,6 +97,7 @@ final readonly class SchemaValidator implements ConfigValidator
                 return null;
             }
 
+            /** @var mixed $current the tree is untyped below its root */
             $current = $current[$segment];
         }
 
@@ -128,6 +117,7 @@ final readonly class SchemaValidator implements ConfigValidator
                 return false;
             }
 
+            /** @var mixed $current the tree is untyped below its root */
             $current = $current[$segment];
         }
 
@@ -136,13 +126,16 @@ final readonly class SchemaValidator implements ConfigValidator
 
     private function checkType(mixed $value, string $type): bool
     {
-        $check = self::TYPE_CHECKS[$type] ?? null;
-
-        if ($check !== null) {
-            return $check($value);
-        }
-
-        // Class/interface name
-        return $value instanceof $type;
+        return match ($type) {
+            'string' => is_string($value),
+            'int', 'integer' => is_int($value),
+            'float', 'double' => is_float($value),
+            'bool', 'boolean' => is_bool($value),
+            'array' => is_array($value),
+            'numeric' => is_numeric($value),
+            'scalar' => is_scalar($value),
+            // Any other type is a class or interface name.
+            default => $value instanceof $type,
+        };
     }
 }

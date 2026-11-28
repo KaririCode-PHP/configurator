@@ -16,7 +16,7 @@ final class JsonLoaderTest extends TestCase
     protected function setUp(): void
     {
         $this->loader = new JsonLoader();
-        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/Config';
     }
 
     public function testLoadsValidJsonConfig(): void
@@ -24,8 +24,8 @@ final class JsonLoaderTest extends TestCase
         $data = $this->loader->load($this->fixturesPath . '/services.json');
 
         self::assertIsArray($data);
-        self::assertSame('smtp', $data['services']['mailer']['transport']);
-        self::assertSame(587, $data['services']['mailer']['port']);
+        self::assertSame('smtp', self::at($data, 'services', 'mailer', 'transport'));
+        self::assertSame(587, self::at($data, 'services', 'mailer', 'port'));
     }
 
     public function testThrowsForNonExistentFile(): void
@@ -41,7 +41,7 @@ final class JsonLoaderTest extends TestCase
         $this->expectException(LoaderException::class);
         $this->expectExceptionCode(1102);
 
-        $this->loader->load(dirname(__DIR__, 2) . '/Fixture/invalid/invalid.json');
+        $this->loader->load(dirname(__DIR__, 2) . '/Fixture/Invalid/invalid.json');
     }
 
     public function testSupportsJsonExtension(): void
@@ -49,5 +49,16 @@ final class JsonLoaderTest extends TestCase
         self::assertTrue($this->loader->supports('json'));
         self::assertFalse($this->loader->supports('php'));
         self::assertFalse($this->loader->supports('yaml'));
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
     }
 }

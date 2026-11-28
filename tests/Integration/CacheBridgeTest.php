@@ -25,7 +25,7 @@ final class CacheBridgeTest extends TestCase
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->dir . '/*') ?: []);
+        array_map('unlink', self::filesIn($this->dir . '/*'));
         rmdir($this->dir);
     }
 
@@ -71,6 +71,14 @@ final class CacheBridgeTest extends TestCase
 
         self::assertSame('changed', $bridge->load($files)->get('v'));
     }
+
+    /** @return list<string> */
+    private static function filesIn(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
+    }
 }
 
 /**
@@ -86,7 +94,7 @@ final class InMemoryCache implements CacheInterface
         return $this->items[$key] ?? $default;
     }
 
-    public function set(string $key, mixed $value, null|int|\DateInterval $ttl = null): bool
+    public function set(string $key, mixed $value, int|\DateInterval|null $ttl = null): bool
     {
         $this->items[$key] = $value;
 
@@ -124,12 +132,14 @@ final class InMemoryCache implements CacheInterface
     }
 
     /**
-     * @param iterable<string, mixed> $values
+     * @param iterable<mixed, mixed> $values
      */
-    public function setMultiple(iterable $values, null|int|\DateInterval $ttl = null): bool
+    public function setMultiple(iterable $values, int|\DateInterval|null $ttl = null): bool
     {
         foreach ($values as $key => $value) {
-            $this->set($key, $value, $ttl);
+            if (is_string($key)) {
+                $this->set($key, $value, $ttl);
+            }
         }
 
         return true;

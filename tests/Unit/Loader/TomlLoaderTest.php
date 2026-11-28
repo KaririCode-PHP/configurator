@@ -23,7 +23,7 @@ final class TomlLoaderTest extends TestCase
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->fixtureDir . '/*') ?: []);
+        array_map('unlink', self::filesIn($this->fixtureDir . '/*'));
         rmdir($this->fixtureDir);
     }
 
@@ -93,31 +93,31 @@ final class TomlLoaderTest extends TestCase
     {
         $result = $this->load("[database]\nhost = \"localhost\"\nport = 5432\n");
 
-        self::assertSame('localhost', $result['database']['host']);
-        self::assertSame(5432, $result['database']['port']);
+        self::assertSame('localhost', self::at($result, 'database', 'host'));
+        self::assertSame(5432, self::at($result, 'database', 'port'));
     }
 
     public function testDottedTable(): void
     {
         $result = $this->load("[a.b.c]\nvalue = 1\n");
 
-        self::assertSame(1, $result['a']['b']['c']['value']);
+        self::assertSame(1, self::at($result, 'a', 'b', 'c', 'value'));
     }
 
     public function testDottedKeys(): void
     {
         $result = $this->load("server.host = \"web1\"\nserver.port = 80\n");
 
-        self::assertSame('web1', $result['server']['host']);
-        self::assertSame(80, $result['server']['port']);
+        self::assertSame('web1', self::at($result, 'server', 'host'));
+        self::assertSame(80, self::at($result, 'server', 'port'));
     }
 
     public function testTwoTables(): void
     {
         $result = $this->load("[app]\nname = \"x\"\n\n[db]\nname = \"y\"\n");
 
-        self::assertSame('x', $result['app']['name']);
-        self::assertSame('y', $result['db']['name']);
+        self::assertSame('x', self::at($result, 'app', 'name'));
+        self::assertSame('y', self::at($result, 'db', 'name'));
     }
 
     // ── Arrays and Inline Tables ──────────────────────────────────────
@@ -264,7 +264,7 @@ final class TomlLoaderTest extends TestCase
     {
         $data = $this->load("[fruit]\napple.color = \"red\"\n[fruit.apple.texture]\nsmooth = true\n");
 
-        self::assertSame(['color' => 'red', 'texture' => ['smooth' => true]], $data['fruit']['apple']);
+        self::assertSame(['color' => 'red', 'texture' => ['smooth' => true]], self::at($data, 'fruit', 'apple'));
     }
 
     public function testErrorReportsRealPathAndLineAfterMultiLineArray(): void
@@ -289,11 +289,31 @@ final class TomlLoaderTest extends TestCase
         $this->load("[[products]]\nname = \"x\"\n");
     }
 
+    /** @return array<mixed> */
     private function load(string $content): array
     {
         $path = $this->fixtureDir . '/config.toml';
         file_put_contents($path, $content);
 
         return $this->loader->load($path);
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
+    }
+
+    /** @return list<string> */
+    private static function filesIn(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
     }
 }

@@ -141,13 +141,16 @@ final class Configuration implements Configurator
 
     // ── Typed Accessors (Configurator contract) ───────────────────────
 
+    #[\Override]
     public function get(string $path, mixed $default = null): mixed
     {
         return $this->resolve($path) ?? $default;
     }
 
+    #[\Override]
     public function getString(string $path, string $default = ''): string
     {
+        /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
         if ($value === null) {
@@ -161,8 +164,10 @@ final class Configuration implements Configurator
         throw ConfigurationException::typeMismatch($path, 'string', get_debug_type($value));
     }
 
+    #[\Override]
     public function getInt(string $path, int $default = 0): int
     {
+        /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
         if ($value === null) {
@@ -180,8 +185,10 @@ final class Configuration implements Configurator
         throw ConfigurationException::typeMismatch($path, 'int', get_debug_type($value));
     }
 
+    #[\Override]
     public function getFloat(string $path, float $default = 0.0): float
     {
+        /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
         if ($value === null) {
@@ -199,8 +206,10 @@ final class Configuration implements Configurator
         throw ConfigurationException::typeMismatch($path, 'float', get_debug_type($value));
     }
 
+    #[\Override]
     public function getBool(string $path, bool $default = false): bool
     {
+        /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
         if ($value === null) {
@@ -231,8 +240,10 @@ final class Configuration implements Configurator
      *
      * @return array<array-key, mixed>
      */
+    #[\Override]
     public function getArray(string $path, array $default = []): array
     {
+        /** @var mixed $value configuration leaves are untyped; narrowed below. */
         $value = $this->resolve($path);
 
         if ($value === null) {
@@ -246,11 +257,13 @@ final class Configuration implements Configurator
         throw ConfigurationException::typeMismatch($path, 'array', get_debug_type($value));
     }
 
+    #[\Override]
     public function has(string $path): bool
     {
         return $this->resolve($path) !== null;
     }
 
+    #[\Override]
     public function all(): array
     {
         return $this->data;
@@ -294,6 +307,7 @@ final class Configuration implements Configurator
                 return null;
             }
 
+            /** @var mixed $current the tree is untyped below its root */
             $current = $current[$segment];
         }
 

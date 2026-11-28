@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Environment;
 
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * In-memory environment resolver for testing.
@@ -15,21 +15,22 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * @package KaririCode\Configurator
  * @since   4.1.0 ARFA 1.3
  */
-final class InMemoryEnvironmentResolver implements EnvironmentResolverInterface
+final class InMemoryEnvironmentResolver implements EnvironmentResolver
 {
     /**
      * @param array<string, string> $variables
      */
     public function __construct(
         private array $variables = [],
-    ) {
-    }
+    ) {}
 
+    #[\Override]
     public function get(string $name): ?string
     {
         return $this->variables[$name] ?? null;
     }
 
+    #[\Override]
     public function has(string $name): bool
     {
         return isset($this->variables[$name]);

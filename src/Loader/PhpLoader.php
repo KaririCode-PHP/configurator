@@ -27,12 +27,15 @@ use KaririCode\Configurator\Exception\LoaderException;
  */
 final readonly class PhpLoader implements Loader
 {
+    #[\Override]
     public function load(string $path): array
     {
         $realPath = $this->validatePath($path);
 
         // Isolated scope — prevents the included file from accessing $this
+        /** @var mixed $result a configuration file may return anything; checked below. */
         $result = (static function (string $file): mixed {
+            /** @psalm-suppress UnresolvableInclude including a caller-supplied configuration file is this loader's purpose */
             return require $file;
         })($realPath);
 
@@ -43,6 +46,7 @@ final readonly class PhpLoader implements Loader
         return $result;
     }
 
+    #[\Override]
     public function supports(string $extension): bool
     {
         return $extension === 'php';

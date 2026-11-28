@@ -94,6 +94,7 @@ final class ReloadableConfiguration implements Configurator
 
     // ── Configurator Contract (delegated) ─────────────────────────────
 
+    #[\Override]
     public function get(string $path, mixed $default = null): mixed
     {
         $this->checkAndReload();
@@ -101,6 +102,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->get($path, $default);
     }
 
+    #[\Override]
     public function getString(string $path, string $default = ''): string
     {
         $this->checkAndReload();
@@ -108,6 +110,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->getString($path, $default);
     }
 
+    #[\Override]
     public function getInt(string $path, int $default = 0): int
     {
         $this->checkAndReload();
@@ -115,6 +118,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->getInt($path, $default);
     }
 
+    #[\Override]
     public function getFloat(string $path, float $default = 0.0): float
     {
         $this->checkAndReload();
@@ -122,6 +126,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->getFloat($path, $default);
     }
 
+    #[\Override]
     public function getBool(string $path, bool $default = false): bool
     {
         $this->checkAndReload();
@@ -129,6 +134,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->getBool($path, $default);
     }
 
+    #[\Override]
     public function getArray(string $path, array $default = []): array
     {
         $this->checkAndReload();
@@ -136,6 +142,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->getArray($path, $default);
     }
 
+    #[\Override]
     public function has(string $path): bool
     {
         $this->checkAndReload();
@@ -143,6 +150,7 @@ final class ReloadableConfiguration implements Configurator
         return $this->inner->has($path);
     }
 
+    #[\Override]
     public function all(): array
     {
         $this->checkAndReload();

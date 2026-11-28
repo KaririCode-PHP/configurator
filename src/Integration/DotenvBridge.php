@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Integration;
 
 use KaririCode\Configurator\ConfigurationBuilder;
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * Convenience bridge for KaririCode\Dotenv integration.
@@ -37,7 +37,7 @@ final class DotenvBridge
     /**
      * Creates a pre-configured builder with Dotenv environment resolution.
      *
-     * @param object|EnvironmentResolverInterface $dotenv     Dotenv instance or resolver
+     * @param object|EnvironmentResolver $dotenv     Dotenv instance or resolver
      * @param bool                                $strict     Throw on undefined vars
      * @param bool                                $systemFallback Fall back to system env
      */

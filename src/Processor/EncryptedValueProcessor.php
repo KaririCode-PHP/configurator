@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Processor;
 
 use KaririCode\Configurator\Exception\ConfigurationException;
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
+use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
  * Decrypts values wrapped in the ENC() envelope during config loading.
@@ -30,7 +30,7 @@ use KaririCode\Contract\Configuration\ValueProcessorInterface;
  * @package KaririCode\Configurator
  * @since   4.1.0 ARFA 1.3
  */
-final readonly class EncryptedValueProcessor implements ValueProcessorInterface
+final readonly class EncryptedValueProcessor implements ValueProcessor
 {
     private const string CIPHER = 'aes-256-gcm';
     private const int NONCE_LENGTH = 12;
@@ -78,6 +78,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessorInterface
         return $key;
     }
 
+    #[\Override]
     public function supports(mixed $value): bool
     {
         return is_string($value)
@@ -85,6 +86,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessorInterface
             && str_ends_with($value, self::ENVELOPE_SUFFIX);
     }
 
+    #[\Override]
     public function process(mixed $value): mixed
     {
         if (!is_string($value)) {

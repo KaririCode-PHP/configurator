@@ -71,6 +71,7 @@ final readonly class YamlLoader implements Loader
         'P' => "\u{2029}",
     ];
 
+    #[\Override]
     public function load(string $path): array
     {
         if (!is_file($path) || !is_readable($path)) {
@@ -90,6 +91,7 @@ final readonly class YamlLoader implements Loader
         }
     }
 
+    #[\Override]
     public function supports(string $extension): bool
     {
         return $extension === 'yaml' || $extension === 'yml';
@@ -142,9 +144,8 @@ final readonly class YamlLoader implements Loader
 
         for ($index = 0; $index < $count; ++$index) {
             $line = rtrim($raw[$index]);
-            $stripped = ltrim($line);
 
-            if ($stripped === '' || $stripped[0] === '#' || $line[0] === '%' || $line === '---' || $line === '...') {
+            if ($this->isIgnorable($line)) {
                 continue;
             }
 
@@ -177,43 +178,73 @@ final readonly class YamlLoader implements Loader
     }
 
     /**
+     * Blank lines, full-line comments, directives (%YAML) and document
+     * markers (--- and ...) carry no configuration.
+     */
+    private function isIgnorable(string $line): bool
+    {
+        $stripped = ltrim($line);
+
+        return $stripped === ''
+            || $stripped[0] === '#'
+            || $line[0] === '%'
+            || in_array(needle: $line, haystack: ['---', '...'], strict: true);
+    }
+
+    /**
      * Detects YAML features outside the configuration subset.
      *
      * @throws ConfigurationException
      */
     private function detectUnsupportedFeatures(string $line, int $lineNumber): void
     {
+        $feature = $this->unsupportedFeature($line);
+
+        if ($feature !== null) {
+            throw ConfigurationException::unsupportedYamlFeature($feature, $lineNumber);
+        }
+    }
+
+    /**
+     * The message for the first feature outside the subset that the line
+     * uses, or null.
+     */
+    private function unsupportedFeature(string $line): ?string
+    {
         $stripped = ltrim($line);
+        $indentation = substr($line, 0, strlen($line) - strlen($stripped));
 
-        if (
-            preg_match('/&\w+\s*$/', $stripped) === 1
+        return match (true) {
+            $this->hasAnchor($stripped) => 'YAML anchors (&name) are not supported',
+            // Checked before aliases: a merge line always contains an alias.
+            preg_match('/^<< ?:/', $stripped) === 1 => 'YAML merge keys (<<:) are not supported',
+            $this->hasAlias($stripped) => 'YAML aliases (*name) are not supported',
+            preg_match('/!!\w+/', $stripped) === 1 => 'YAML type tags (!!type) are not supported',
+            str_contains($indentation, "\t") => 'Tab indentation is not allowed — use spaces only',
+            default => null,
+        };
+    }
+
+    /**
+     * An anchor (&name) ends the line, follows "key:", or follows "- ".
+     */
+    private function hasAnchor(string $stripped): bool
+    {
+        return preg_match('/&\w+\s*$/', $stripped) === 1
             || preg_match('/:\s+&\w+/', $stripped) === 1
-            || preg_match('/^-\s+&\w+/', $stripped) === 1
-        ) {
-            throw ConfigurationException::unsupportedYamlFeature('YAML anchors (&name) are not supported', $lineNumber);
-        }
+            || preg_match('/^-\s+&\w+/', $stripped) === 1;
+    }
 
-        // Checked before aliases: a merge line always contains an alias.
-        if (str_starts_with($stripped, '<<:') || str_starts_with($stripped, '<< :')) {
-            throw ConfigurationException::unsupportedYamlFeature('YAML merge keys (<<:) are not supported', $lineNumber);
-        }
-
-        if (
-            preg_match('/\*\w+/', $stripped) === 1
+    /**
+     * An alias (*name) is the whole value of "key:" or "- ", on a line
+     * without quotes (where '*' may be literal text).
+     */
+    private function hasAlias(string $stripped): bool
+    {
+        return preg_match('/\*\w+/', $stripped) === 1
             && !str_contains($stripped, '"')
             && !str_contains($stripped, "'")
-            && (preg_match('/:\s+\*\w+/', $stripped) === 1 || preg_match('/^-\s+\*\w+/', $stripped) === 1)
-        ) {
-            throw ConfigurationException::unsupportedYamlFeature('YAML aliases (*name) are not supported', $lineNumber);
-        }
-
-        if (preg_match('/!!\w+/', $stripped) === 1) {
-            throw ConfigurationException::unsupportedYamlFeature('YAML type tags (!!type) are not supported', $lineNumber);
-        }
-
-        if ($line !== $stripped && str_contains(substr($line, 0, strlen($line) - strlen($stripped)), "\t")) {
-            throw ConfigurationException::unsupportedYamlFeature('Tab indentation is not allowed — use spaces only', $lineNumber);
-        }
+            && (preg_match('/:\s+\*\w+/', $stripped) === 1 || preg_match('/^-\s+\*\w+/', $stripped) === 1);
     }
 
     /**
@@ -261,11 +292,60 @@ final readonly class YamlLoader implements Loader
      */
     private function consumeBlockScalar(array $raw, int $index, int $parentColumn, array $header): array
     {
-        $style = $header[1];
+        [$style, $chomping, $indicator] = $this->blockHeader($header);
+        [$content, $last] = $this->blockLines(
+            raw: $raw,
+            index: $index,
+            parentColumn: $parentColumn,
+            contentIndent: $indicator > 0 ? $parentColumn + $indicator : null,
+        );
+
+        $trailing = 0;
+
+        while ($content !== [] && end($content) === '') {
+            array_pop($content);
+            ++$trailing;
+        }
+
+        $text = $style === '|' ? implode("\n", $content) : $this->foldLines($content);
+
+        $value = match ($chomping) {
+            '-' => $text,
+            '+' => $text . ($content === [] ? '' : "\n") . str_repeat("\n", $trailing),
+            default => $content === [] ? '' : $text . "\n",
+        };
+
+        return [$value, $last];
+    }
+
+    /**
+     * Reads the style (| or >), the chomping indicator (-, + or none) and
+     * the indentation indicator (0 when absent) of a block scalar header;
+     * the two indicators may come in either order.
+     *
+     * @param array<array-key, string> $header BLOCK_HEADER match groups
+     *
+     * @return array{0: string, 1: string, 2: int}
+     */
+    private function blockHeader(array $header): array
+    {
         $chomping = ($header[2] ?? '') !== '' ? $header[2] : ($header[5] ?? '');
         $indicator = (int) (($header[3] ?? '') !== '' ? $header[3] : ($header[4] ?? '0'));
 
-        $contentIndent = $indicator > 0 ? $parentColumn + $indicator : null;
+        return [$header[1], $chomping, $indicator];
+    }
+
+    /**
+     * Collects the content lines of a block scalar: every line indented
+     * past the parent and at least as far as the first content line (or
+     * the explicit indentation), with blank lines kept as empty strings.
+     *
+     * @param list<string> $raw
+     *
+     * @return array{0: list<string>, 1: int} the lines, without their indentation, and the index of the last one
+     */
+    private function blockLines(array $raw, int $index, int $parentColumn, ?int $contentIndent): array
+    {
         $content = [];
         $last = $index;
         $count = count($raw);
@@ -290,22 +370,7 @@ final readonly class YamlLoader implements Loader
             $last = $i;
         }
 
-        $trailing = 0;
-
-        while ($content !== [] && end($content) === '') {
-            array_pop($content);
-            ++$trailing;
-        }
-
-        $text = $style === '|' ? implode("\n", $content) : $this->foldLines($content);
-
-        $value = match ($chomping) {
-            '-' => $text,
-            '+' => $text . ($content === [] ? '' : "\n") . str_repeat("\n", $trailing),
-            default => $content === [] ? '' : $text . "\n",
-        };
-
-        return [$value, $last];
+        return [$content, $last];
     }
 
     /**
@@ -462,7 +527,7 @@ final readonly class YamlLoader implements Loader
      *
      * @param list<string> $lines
      *
-     * @return array{0: mixed, 1: int} the value and the index after it
+     * @return array{0: array<array-key, mixed>|null, 1: int} the value and the index after it
      */
     private function parseNestedValue(array $lines, int $index, int $end, int $keyIndent): array
     {
@@ -491,7 +556,7 @@ final readonly class YamlLoader implements Loader
     /**
      * @param list<string> $lines
      *
-     * @return list<mixed>
+     * @return list<string|int|float|bool|array<array-key, mixed>|null>
      *
      * @throws \UnexpectedValueException When a line is not an item at this level
      */
@@ -523,8 +588,10 @@ final readonly class YamlLoader implements Loader
      * together with its continuation.
      *
      * @param list<string> $continuation
+     *
+     * @return string|int|float|bool|array<array-key, mixed>|null
      */
-    private function parseSequenceItem(string $line, array $continuation): mixed
+    private function parseSequenceItem(string $line, array $continuation): string|int|float|bool|array|null
     {
         $contentColumn = $this->skipSpaces($line, $this->indentLevel($line) + 1);
         $content = substr($line, $contentColumn);
@@ -545,9 +612,11 @@ final readonly class YamlLoader implements Loader
     /**
      * @param list<string> $continuation more-indented lines after the value
      *
+     * @return string|int|float|bool|array<array-key, mixed>|null
+     *
      * @throws \UnexpectedValueException When a flow or quoted value has continuation lines
      */
-    private function parseInlineValue(string $value, array $continuation = []): mixed
+    private function parseInlineValue(string $value, array $continuation = []): string|int|float|bool|array|null
     {
         $value = $this->stripInlineComment($value);
         $first = $value[0] ?? '';
@@ -564,10 +633,18 @@ final readonly class YamlLoader implements Loader
             };
         }
 
-        if ($continuation === []) {
-            return $this->parseScalar($value);
-        }
+        return $this->parseScalar($this->joinPlainScalar($value, $continuation));
+    }
 
+    /**
+     * Joins a plain scalar with its continuation lines, one space apart.
+     *
+     * @param list<string> $continuation
+     *
+     * @throws \UnexpectedValueException When a continuation line is a key or a sequence item
+     */
+    private function joinPlainScalar(string $value, array $continuation): string
+    {
         $parts = [$value];
 
         foreach ($continuation as $line) {
@@ -580,7 +657,7 @@ final readonly class YamlLoader implements Loader
             $parts[] = $part;
         }
 
-        return $this->parseScalar(implode(' ', $parts));
+        return implode(' ', $parts);
     }
 
     // ── Scalar Parsing ────────────────────────────────────────────────
@@ -589,7 +666,7 @@ final readonly class YamlLoader implements Loader
     {
         $value = trim($value);
 
-        if ($value === '') {
+        if ($value === '' || $value === '~') {
             return null;
         }
 
@@ -602,18 +679,20 @@ final readonly class YamlLoader implements Loader
 
         $lower = strtolower($value);
 
-        if ($value === '~' || $lower === 'null') {
-            return null;
-        }
+        return match (true) {
+            $lower === 'null' => null,
+            in_array(needle: $lower, haystack: ['true', 'yes', 'on'], strict: true) => true,
+            in_array(needle: $lower, haystack: ['false', 'no', 'off'], strict: true) => false,
+            default => $this->parseNumber($value, $lower) ?? $value,
+        };
+    }
 
-        if ($lower === 'true' || $lower === 'yes' || $lower === 'on') {
-            return true;
-        }
-
-        if ($lower === 'false' || $lower === 'no' || $lower === 'off') {
-            return false;
-        }
-
+    /**
+     * A YAML 1.2 number: binary, octal, hexadecimal, decimal, float or one
+     * of the special floats; null when the plain scalar is not a number.
+     */
+    private function parseNumber(string $value, string $lower): int|float|null
+    {
         // intval(.., 0) does not recognize 0b/0o prefixes, so each radix is
         // handled explicitly. YAML 1.2 treats a leading zero as decimal.
         if (preg_match('/^(-?)0b([01]+)$/i', $value, $matches) === 1) {
@@ -644,7 +723,7 @@ final readonly class YamlLoader implements Loader
             '.inf', '+.inf' => INF,
             '-.inf' => -INF,
             '.nan' => NAN,
-            default => $value,
+            default => null,
         };
     }
 
@@ -719,14 +798,14 @@ final readonly class YamlLoader implements Loader
     // ── Flow Collections ──────────────────────────────────────────────
 
     /**
-     * @return list<mixed>
+     * @return list<string|int|float|bool|array<array-key, mixed>|null>
      */
     private function parseFlowSequence(string $value): array
     {
         $this->assertFlowClosesAtEnd($value);
 
         return array_map(
-            fn (string $item): mixed => $this->parseInlineValue($item),
+            fn(string $item): string|int|float|bool|array|null => $this->parseInlineValue($item),
             $this->splitFlowItems(substr($value, 1, -1)),
         );
     }
@@ -848,12 +927,24 @@ final readonly class YamlLoader implements Loader
                 continue;
             }
 
-            $next = $text[$i + 1] ?? ' ';
-            $canOpen = str_contains('[{,', $char)
-                || (str_contains(':-?', $char) && ($next === ' ' || $next === "\t" || $next === '"' || $next === "'"));
+            $canOpen = $this->quoteMayFollow($char, $text[$i + 1] ?? ' ');
         }
 
         return $masked;
+    }
+
+    /**
+     * Whether a quote may open a scalar after $char: after a flow
+     * indicator, or after ":", "-" or "?" that the next byte ($next)
+     * separates from the value.
+     */
+    private function quoteMayFollow(string $char, string $next): bool
+    {
+        return in_array(needle: $char, haystack: ['[', '{', ','], strict: true)
+            || (
+                in_array(needle: $char, haystack: [':', '-', '?'], strict: true)
+                && in_array(needle: $next, haystack: [' ', "\t", '"', "'"], strict: true)
+            );
     }
 
     /**
@@ -919,23 +1010,42 @@ final readonly class YamlLoader implements Loader
 
         for ($i = 0; $i < $length; ++$i) {
             $char = $masked[$i];
+            $depth += match ($char) {
+                '[', '{' => 1,
+                ']', '}' => -1,
+                default => 0,
+            };
 
-            if ($char === '[' || $char === '{') {
-                ++$depth;
-            } elseif ($char === ']' || $char === '}') {
-                --$depth;
-            } elseif ($char === '#' && ($i === 0 || $masked[$i - 1] === ' ' || $masked[$i - 1] === "\t")) {
+            if ($char === '#' && $this->startsComment($masked, $i)) {
                 return false;
-            } elseif ($char === ':' && $depth === 0) {
-                $next = $masked[$i + 1] ?? ' ';
+            }
 
-                if ($next === ' ' || $next === "\t" || ($i > 0 && $masked[$i - 1] === self::MASK)) {
-                    return $i;
-                }
+            if ($char === ':' && $depth === 0 && $this->separatesValue($masked, $i)) {
+                return $i;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Whether the '#' at $position opens a comment: at the start of the
+     * text or after whitespace.
+     */
+    private function startsComment(string $masked, int $position): bool
+    {
+        return $position === 0 || in_array(needle: $masked[$position - 1], haystack: [' ', "\t"], strict: true);
+    }
+
+    /**
+     * Whether the ':' at $position separates a key from its value:
+     * followed by whitespace or the end of the text, or directly after a
+     * quoted key (JSON-style).
+     */
+    private function separatesValue(string $masked, int $position): bool
+    {
+        return in_array(needle: $masked[$position + 1] ?? ' ', haystack: [' ', "\t"], strict: true)
+            || ($position > 0 && $masked[$position - 1] === self::MASK);
     }
 
     /**

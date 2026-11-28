@@ -18,6 +18,7 @@ use KaririCode\Configurator\Contract\MergeStrategy;
  */
 final readonly class ReplaceMerge implements MergeStrategy
 {
+    #[\Override]
     public function merge(array $base, array $source): array
     {
         return array_replace($base, $source);

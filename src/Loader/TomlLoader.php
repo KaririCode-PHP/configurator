@@ -53,6 +53,7 @@ final readonly class TomlLoader implements Loader
         '\\' => '\\',
     ];
 
+    #[\Override]
     public function load(string $path): array
     {
         if (!is_file($path) || !is_readable($path)) {
@@ -72,6 +73,7 @@ final readonly class TomlLoader implements Loader
         }
     }
 
+    #[\Override]
     public function supports(string $extension): bool
     {
         return $extension === 'toml';
@@ -92,9 +94,7 @@ final readonly class TomlLoader implements Loader
         }
 
         $lines = explode("\n", str_replace("\r\n", "\n", $toml));
-        $result = [];
-        /** @var array<string, TomlDefinition> $defined */
-        $defined = [];
+        $document = new TomlDocument();
         $table = [];
 
         for ($index = 0, $count = count($lines); $index < $count; ++$index) {
@@ -110,7 +110,7 @@ final readonly class TomlLoader implements Loader
             try {
                 if ($line[0] === '[') {
                     $table = $this->parseTableHeader($line);
-                    $this->declareTable($result, $defined, $table);
+                    $document->declareTable($table);
 
                     continue;
                 }
@@ -123,7 +123,7 @@ final readonly class TomlLoader implements Loader
 
                 $key = $this->parseKey(substr($line, 0, $equals));
                 [$valueText, $index] = $this->collectValue(trim(substr($line, $equals + 1)), $lines, $index);
-                $this->assign($result, $defined, $table, $key, $this->parseValue($valueText, $lineNumber));
+                $document->assign($table, $key, $this->parseValue($valueText, $lineNumber));
             } catch (\UnexpectedValueException $exception) {
                 throw new \UnexpectedValueException(
                     sprintf('%s on line %d', $exception->getMessage(), $lineNumber),
@@ -133,7 +133,7 @@ final readonly class TomlLoader implements Loader
             }
         }
 
-        return $result;
+        return $document->root;
     }
 
     /**
@@ -182,108 +182,6 @@ final readonly class TomlLoader implements Loader
         }
 
         return [$value, $index];
-    }
-
-    // ── Definitions ───────────────────────────────────────────────────
-
-    /**
-     * @param array<array-key, mixed>       $root
-     * @param array<string, TomlDefinition> $defined
-     * @param non-empty-list<string>        $table
-     *
-     * @throws \UnexpectedValueException When the table is already defined or a parent is a value
-     */
-    private function declareTable(array &$root, array &$defined, array $table): void
-    {
-        $cursor = &$root;
-        $last = count($table) - 1;
-
-        foreach ($table as $depth => $segment) {
-            $id = $this->pathId(array_slice($table, 0, $depth + 1));
-            $origin = $defined[$id] ?? null;
-
-            if ($depth === $last) {
-                if ($origin !== null && $origin !== TomlDefinition::ImplicitTable) {
-                    throw new \UnexpectedValueException(sprintf("table '%s' is already defined", implode('.', $table)));
-                }
-
-                $defined[$id] = TomlDefinition::HeaderTable;
-            } elseif ($origin === TomlDefinition::Value) {
-                throw new \UnexpectedValueException(sprintf("key '%s' is not a table", $segment));
-            } else {
-                $defined[$id] = $origin ?? TomlDefinition::ImplicitTable;
-            }
-
-            if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
-                $cursor[$segment] = [];
-            }
-
-            $cursor = &$cursor[$segment];
-        }
-    }
-
-    /**
-     * Assigns $value at $table + $key, enforcing TOML's definition rules:
-     * a key is defined once, a value is never extended, and dotted keys
-     * never reopen a table declared by a header.
-     *
-     * @param array<array-key, mixed>       $root
-     * @param array<string, TomlDefinition> $defined
-     * @param list<string>                  $table
-     * @param non-empty-list<string>        $key
-     *
-     * @throws \UnexpectedValueException When a definition rule is violated
-     */
-    private function assign(array &$root, array &$defined, array $table, array $key, mixed $value): void
-    {
-        $path = [...$table, ...$key];
-        $last = count($path) - 1;
-        $headerDepth = count($table);
-        $cursor = &$root;
-
-        foreach ($path as $depth => $segment) {
-            $id = $this->pathId(array_slice($path, 0, $depth + 1));
-            $origin = $defined[$id] ?? null;
-
-            if ($depth === $last) {
-                if ($origin !== null) {
-                    throw new \UnexpectedValueException(sprintf("duplicate key '%s'", implode('.', $path)));
-                }
-
-                $defined[$id] = TomlDefinition::Value;
-                $cursor[$segment] = $value;
-
-                return;
-            }
-
-            if ($origin === TomlDefinition::Value) {
-                throw new \UnexpectedValueException(sprintf("key '%s' is not a table", $segment));
-            }
-
-            if ($depth >= $headerDepth) {
-                if ($origin === TomlDefinition::HeaderTable || $origin === TomlDefinition::ImplicitTable) {
-                    throw new \UnexpectedValueException(sprintf("table '%s' is already defined", $segment));
-                }
-
-                $defined[$id] = TomlDefinition::DottedTable;
-            }
-
-            if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
-                $cursor[$segment] = [];
-            }
-
-            $cursor = &$cursor[$segment];
-        }
-    }
-
-    /**
-     * Unambiguous identifier of a key path (length-prefixed segments).
-     *
-     * @param list<string> $segments
-     */
-    private function pathId(array $segments): string
-    {
-        return implode('', array_map(static fn (string $segment): string => strlen($segment) . ':' . $segment, $segments));
     }
 
     // ── Keys ──────────────────────────────────────────────────────────
@@ -354,10 +252,12 @@ final readonly class TomlLoader implements Loader
     // ── Values ────────────────────────────────────────────────────────
 
     /**
+     * @return string|int|float|bool|array<array-key, mixed>
+     *
      * @throws ConfigurationException    When the value is a date/time
      * @throws \UnexpectedValueException When the value is not valid TOML
      */
-    private function parseValue(string $value, int $lineNumber): mixed
+    private function parseValue(string $value, int $lineNumber): string|int|float|bool|array
     {
         $first = $value[0] ?? '';
 
@@ -404,11 +304,11 @@ final readonly class TomlLoader implements Loader
     private function parseNumber(string $value): int|float
     {
         if (preg_match('/^[+-]?(?:0|[1-9](?:_?\d)*)$/', $value) === 1) {
-            // The pattern guarantees a numeric string: "+ 0" yields an int,
-            // or a float when the value exceeds 64 bits (toInteger rejects it).
-            $digits = str_replace('_', '', $value);
+            // The pattern guarantees an integer literal; FILTER_VALIDATE_INT
+            // refuses one beyond 64 bits, which toInteger() then rejects.
+            $integer = filter_var(str_replace('_', '', $value), FILTER_VALIDATE_INT);
 
-            return $this->toInteger(is_numeric($digits) ? $digits + 0 : INF, $value);
+            return $this->toInteger($integer === false ? INF : $integer, $value);
         }
 
         if (preg_match('/^0x([0-9A-Fa-f](?:_?[0-9A-Fa-f])*)$/', $value, $match) === 1) {
@@ -500,7 +400,7 @@ final readonly class TomlLoader implements Loader
     }
 
     /**
-     * @return list<mixed>
+     * @return list<string|int|float|bool|array<array-key, mixed>>
      *
      * @throws \UnexpectedValueException When the array is malformed
      */
@@ -509,7 +409,7 @@ final readonly class TomlLoader implements Loader
         $this->assertClosesAtEnd($value);
 
         return array_map(
-            fn (string $item): mixed => $this->parseValue($item, $lineNumber),
+            fn(string $item): string|int|float|bool|array => $this->parseValue($item, $lineNumber),
             $this->splitItems(substr($value, 1, -1), trailingComma: true),
         );
     }
@@ -527,9 +427,7 @@ final readonly class TomlLoader implements Loader
             throw new \UnexpectedValueException('inline tables must be on a single line');
         }
 
-        $table = [];
-        /** @var array<string, TomlDefinition> $defined */
-        $defined = [];
+        $table = new TomlDocument();
 
         foreach ($this->splitItems(substr($value, 1, -1), trailingComma: false) as $entry) {
             $equals = strpos($this->maskStrings($entry), '=');
@@ -539,10 +437,10 @@ final readonly class TomlLoader implements Loader
             }
 
             $key = $this->parseKey(substr($entry, 0, $equals));
-            $this->assign($table, $defined, [], $key, $this->parseValue(trim(substr($entry, $equals + 1)), $lineNumber));
+            $table->assign([], $key, $this->parseValue(trim(substr($entry, $equals + 1)), $lineNumber));
         }
 
-        return $table;
+        return $table->root;
     }
 
     /**
@@ -568,11 +466,13 @@ final readonly class TomlLoader implements Loader
         for ($i = 0; $i < $length; ++$i) {
             $char = $masked[$i];
 
-            if ($char === '[' || $char === '{') {
-                ++$depth;
-            } elseif ($char === ']' || $char === '}') {
-                --$depth;
-            } elseif ($char === ',' && $depth === 0) {
+            $depth += match ($char) {
+                '[', '{' => 1,
+                ']', '}' => -1,
+                default => 0,
+            };
+
+            if ($char === ',' && $depth === 0) {
                 $pieces[] = trim(substr($inner, $start, $i - $start));
                 $start = $i + 1;
             }

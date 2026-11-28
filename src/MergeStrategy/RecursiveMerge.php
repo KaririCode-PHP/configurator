@@ -23,34 +23,27 @@ use KaririCode\Configurator\Contract\MergeStrategy;
  */
 final readonly class RecursiveMerge implements MergeStrategy
 {
+    #[\Override]
     public function merge(array $base, array $source): array
     {
-        $result = $base;
+        $nested = [];
 
+        /** @var mixed $value configuration values are untyped; only maps merge */
         foreach ($source as $key => $value) {
-            if (is_int($key)) {
-                // Sequential array — replace, don't merge
-                $result[$key] = $value;
-
-                continue;
-            }
-
             if (
-                is_array($value)
-                && isset($result[$key])
-                && is_array($result[$key])
+                is_string($key)
+                && is_array($value)
+                && isset($base[$key])
+                && is_array($base[$key])
                 && $this->isAssociative($value)
-                && $this->isAssociative($result[$key])
+                && $this->isAssociative($base[$key])
             ) {
-                $result[$key] = $this->merge($result[$key], $value);
-
-                continue;
+                $nested[$key] = $this->merge($base[$key], $value);
             }
-
-            $result[$key] = $value;
         }
 
-        return $result;
+        // Integer keys and non-map values replace; maps merged above win.
+        return array_replace($base, $source, $nested);
     }
 
     /**

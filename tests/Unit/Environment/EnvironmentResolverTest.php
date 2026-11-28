@@ -7,7 +7,7 @@ namespace KaririCode\Configurator\Tests\Unit\Environment;
 use KaririCode\Configurator\Environment\CompositeEnvironmentResolver;
 use KaririCode\Configurator\Environment\InMemoryEnvironmentResolver;
 use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 use PHPUnit\Framework\TestCase;
 
 final class EnvironmentResolverTest extends TestCase
@@ -18,22 +18,22 @@ final class EnvironmentResolverTest extends TestCase
     {
         $resolver = new InMemoryEnvironmentResolver(['KEY' => 'value']);
 
-        $this->assertSame('value', $resolver->get('KEY'));
+        self::assertSame('value', $resolver->get('KEY'));
     }
 
     public function testInMemoryGetReturnsNullForMissing(): void
     {
         $resolver = new InMemoryEnvironmentResolver();
 
-        $this->assertNull($resolver->get('MISSING'));
+        self::assertNull($resolver->get('MISSING'));
     }
 
     public function testInMemoryHasReturnsCorrectly(): void
     {
         $resolver = new InMemoryEnvironmentResolver(['EXISTS' => 'yes']);
 
-        $this->assertTrue($resolver->has('EXISTS'));
-        $this->assertFalse($resolver->has('NOT_EXISTS'));
+        self::assertTrue($resolver->has('EXISTS'));
+        self::assertFalse($resolver->has('NOT_EXISTS'));
     }
 
     public function testInMemorySetAddsVariable(): void
@@ -41,7 +41,7 @@ final class EnvironmentResolverTest extends TestCase
         $resolver = new InMemoryEnvironmentResolver();
         $resolver->set('NEW_KEY', 'new_value');
 
-        $this->assertSame('new_value', $resolver->get('NEW_KEY'));
+        self::assertSame('new_value', $resolver->get('NEW_KEY'));
     }
 
     public function testInMemoryRemoveDeletesVariable(): void
@@ -49,16 +49,16 @@ final class EnvironmentResolverTest extends TestCase
         $resolver = new InMemoryEnvironmentResolver(['KEY' => 'value']);
         $resolver->remove('KEY');
 
-        $this->assertNull($resolver->get('KEY'));
-        $this->assertFalse($resolver->has('KEY'));
+        self::assertNull($resolver->get('KEY'));
+        self::assertFalse($resolver->has('KEY'));
     }
 
     public function testInMemoryEmptyStringIsValid(): void
     {
         $resolver = new InMemoryEnvironmentResolver(['EMPTY' => '']);
 
-        $this->assertTrue($resolver->has('EMPTY'));
-        $this->assertSame('', $resolver->get('EMPTY'));
+        self::assertTrue($resolver->has('EMPTY'));
+        self::assertSame('', $resolver->get('EMPTY'));
     }
 
     public function testInMemoryAllReturnsAllVariables(): void
@@ -66,7 +66,7 @@ final class EnvironmentResolverTest extends TestCase
         $vars = ['A' => '1', 'B' => '2'];
         $resolver = new InMemoryEnvironmentResolver($vars);
 
-        $this->assertSame($vars, $resolver->all());
+        self::assertSame($vars, $resolver->all());
     }
 
     // ── SystemEnvironmentResolver ─────────────────────────────────────
@@ -77,8 +77,8 @@ final class EnvironmentResolverTest extends TestCase
         $resolver = new SystemEnvironmentResolver();
 
         try {
-            $this->assertSame('from_env', $resolver->get('KCODE_TEST_VAR'));
-            $this->assertTrue($resolver->has('KCODE_TEST_VAR'));
+            self::assertSame('from_env', $resolver->get('KCODE_TEST_VAR'));
+            self::assertTrue($resolver->has('KCODE_TEST_VAR'));
         } finally {
             unset($_ENV['KCODE_TEST_VAR']);
         }
@@ -90,7 +90,7 @@ final class EnvironmentResolverTest extends TestCase
         $resolver = new SystemEnvironmentResolver();
 
         try {
-            $this->assertSame('from_server', $resolver->get('KCODE_SERVER_VAR'));
+            self::assertSame('from_server', $resolver->get('KCODE_SERVER_VAR'));
         } finally {
             unset($_SERVER['KCODE_SERVER_VAR']);
         }
@@ -100,8 +100,8 @@ final class EnvironmentResolverTest extends TestCase
     {
         $resolver = new SystemEnvironmentResolver();
 
-        $this->assertNull($resolver->get('KCODE_VERY_UNLIKELY_VAR_12345'));
-        $this->assertFalse($resolver->has('KCODE_VERY_UNLIKELY_VAR_12345'));
+        self::assertNull($resolver->get('KCODE_VERY_UNLIKELY_VAR_12345'));
+        self::assertFalse($resolver->has('KCODE_VERY_UNLIKELY_VAR_12345'));
     }
 
     public function testSystemResolverPrioritizesEnvOverServer(): void
@@ -111,19 +111,13 @@ final class EnvironmentResolverTest extends TestCase
         $resolver = new SystemEnvironmentResolver();
 
         try {
-            $this->assertSame('from_env', $resolver->get('KCODE_PRIORITY_VAR'));
+            self::assertSame('from_env', $resolver->get('KCODE_PRIORITY_VAR'));
         } finally {
             unset($_ENV['KCODE_PRIORITY_VAR'], $_SERVER['KCODE_PRIORITY_VAR']);
         }
     }
 
     // ── CompositeEnvironmentResolver ──────────────────────────────────
-
-    public function testCompositeImplementsEcosystemContract(): void
-    {
-        $composite = new CompositeEnvironmentResolver();
-        $this->assertInstanceOf(EnvironmentResolverInterface::class, $composite);
-    }
 
     public function testCompositeResolvesFromFirstResolver(): void
     {
@@ -132,7 +126,7 @@ final class EnvironmentResolverTest extends TestCase
 
         $composite = new CompositeEnvironmentResolver($primary, $fallback);
 
-        $this->assertSame('primary', $composite->get('KEY'));
+        self::assertSame('primary', $composite->get('KEY'));
     }
 
     public function testCompositeFallsBackToSecondResolver(): void
@@ -142,7 +136,7 @@ final class EnvironmentResolverTest extends TestCase
 
         $composite = new CompositeEnvironmentResolver($primary, $fallback);
 
-        $this->assertSame('fallback', $composite->get('KEY'));
+        self::assertSame('fallback', $composite->get('KEY'));
     }
 
     public function testCompositeReturnsNullWhenNoneResolves(): void
@@ -152,8 +146,8 @@ final class EnvironmentResolverTest extends TestCase
 
         $composite = new CompositeEnvironmentResolver($r1, $r2);
 
-        $this->assertNull($composite->get('MISSING'));
-        $this->assertFalse($composite->has('MISSING'));
+        self::assertNull($composite->get('MISSING'));
+        self::assertFalse($composite->has('MISSING'));
     }
 
     public function testCompositeHasChecksAllResolvers(): void
@@ -163,7 +157,7 @@ final class EnvironmentResolverTest extends TestCase
 
         $composite = new CompositeEnvironmentResolver($primary, $fallback);
 
-        $this->assertTrue($composite->has('ONLY_IN_FALLBACK'));
+        self::assertTrue($composite->has('ONLY_IN_FALLBACK'));
     }
 
     public function testCompositeThreeResolverChain(): void
@@ -174,17 +168,17 @@ final class EnvironmentResolverTest extends TestCase
 
         $composite = new CompositeEnvironmentResolver($r1, $r2, $r3);
 
-        $this->assertSame('from_r1', $composite->get('A'));
-        $this->assertSame('from_r2', $composite->get('B'));
-        $this->assertSame('from_r3', $composite->get('C'));
-        $this->assertNull($composite->get('D'));
+        self::assertSame('from_r1', $composite->get('A'));
+        self::assertSame('from_r2', $composite->get('B'));
+        self::assertSame('from_r3', $composite->get('C'));
+        self::assertNull($composite->get('D'));
     }
 
     public function testCompositeWithNoResolvers(): void
     {
         $composite = new CompositeEnvironmentResolver();
 
-        $this->assertNull($composite->get('ANY'));
-        $this->assertFalse($composite->has('ANY'));
+        self::assertNull($composite->get('ANY'));
+        self::assertFalse($composite->has('ANY'));
     }
 }

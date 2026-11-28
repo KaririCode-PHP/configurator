@@ -5,95 +5,48 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Tests\Integration;
 
 use KaririCode\Configurator\ConfigurationBuilder;
-use KaririCode\Configurator\Contract\ConfigProvider;
-use KaririCode\Configurator\Contract\EnvironmentResolver;
-use KaririCode\Configurator\Contract\ValueProcessor;
 use KaririCode\Configurator\Environment\InMemoryEnvironmentResolver;
 use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
 use KaririCode\Configurator\Integration\DotenvBridge;
 use KaririCode\Configurator\Processor\EncryptedValueProcessor;
 use KaririCode\Configurator\Processor\EnvironmentProcessor;
 use KaririCode\Configurator\Processor\TypeCastProcessor;
-use KaririCode\Contract\Configuration\ConfigProviderInterface;
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Configuration\ConfigProvider;
+use KaririCode\Contract\Configuration\ValueProcessor;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Verifies ecosystem contract compliance and Dotenv integration.
  *
- * Tests that all implementations satisfy both the ecosystem-level
- * contracts (kariricode/contract) and the backward-compatible
- * local aliases (kariricode/configurator Contract/).
+ * Tests that all implementations satisfy the ecosystem-level contracts
+ * of kariricode/contract.
  */
 final class EcosystemIntegrationTest extends TestCase
 {
     // ── Contract Compliance ───────────────────────────────────────────
 
-    public function testSystemResolverImplementsEcosystemContract(): void
+    /**
+     * @return iterable<string, array{class-string, class-string}>
+     */
+    public static function contractImplementations(): iterable
     {
-        $resolver = new SystemEnvironmentResolver();
-
-        $this->assertInstanceOf(EnvironmentResolverInterface::class, $resolver);
+        yield 'system resolver' => [SystemEnvironmentResolver::class, EnvironmentResolver::class];
+        yield 'in-memory resolver' => [InMemoryEnvironmentResolver::class, EnvironmentResolver::class];
+        yield 'composite resolver' => [\KaririCode\Configurator\Environment\CompositeEnvironmentResolver::class, EnvironmentResolver::class];
+        yield 'environment processor' => [EnvironmentProcessor::class, ValueProcessor::class];
+        yield 'type-cast processor' => [TypeCastProcessor::class, ValueProcessor::class];
+        yield 'encrypted value processor' => [EncryptedValueProcessor::class, ValueProcessor::class];
     }
 
-    public function testInMemoryResolverImplementsEcosystemContract(): void
+    /**
+     * @param class-string $implementation
+     * @param class-string $contract
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('contractImplementations')]
+    public function testImplementationsDeclareTheEcosystemContracts(string $implementation, string $contract): void
     {
-        $resolver = new InMemoryEnvironmentResolver();
-
-        $this->assertInstanceOf(EnvironmentResolverInterface::class, $resolver);
-    }
-
-    public function testCompositeResolverImplementsEcosystemContract(): void
-    {
-        $resolver = new \KaririCode\Configurator\Environment\CompositeEnvironmentResolver();
-
-        $this->assertInstanceOf(EnvironmentResolverInterface::class, $resolver);
-    }
-
-    public function testEnvironmentProcessorImplementsEcosystemContract(): void
-    {
-        $processor = new EnvironmentProcessor();
-
-        $this->assertInstanceOf(ValueProcessorInterface::class, $processor);
-    }
-
-    public function testTypeCastProcessorImplementsEcosystemContract(): void
-    {
-        $processor = new TypeCastProcessor();
-
-        $this->assertInstanceOf(ValueProcessorInterface::class, $processor);
-    }
-
-    public function testEncryptedValueProcessorImplementsEcosystemContract(): void
-    {
-        $key = str_repeat('a', 32);
-        $processor = new EncryptedValueProcessor($key);
-
-        $this->assertInstanceOf(ValueProcessorInterface::class, $processor);
-    }
-
-    // ── Backward Compatibility — Local Aliases ────────────────────────
-
-    public function testLocalEnvironmentResolverExtendsEcosystem(): void
-    {
-        $this->assertTrue(
-            is_subclass_of(EnvironmentResolver::class, EnvironmentResolverInterface::class),
-        );
-    }
-
-    public function testLocalValueProcessorExtendsEcosystem(): void
-    {
-        $this->assertTrue(
-            is_subclass_of(ValueProcessor::class, ValueProcessorInterface::class),
-        );
-    }
-
-    public function testLocalConfigProviderExtendsEcosystem(): void
-    {
-        $this->assertTrue(
-            is_subclass_of(ConfigProvider::class, ConfigProviderInterface::class),
-        );
+        self::assertTrue(is_subclass_of($implementation, $contract));
     }
 
     // ── withDotenv() Integration ──────────────────────────────────────
@@ -101,6 +54,7 @@ final class EcosystemIntegrationTest extends TestCase
     public function testWithDotenvAcceptsObjectWithAllMethod(): void
     {
         $dotenv = new class {
+            /** @return array<string, string> */
             public function all(): array
             {
                 return [
@@ -120,8 +74,8 @@ final class EcosystemIntegrationTest extends TestCase
             ])
             ->build();
 
-        $this->assertSame('KaririCode', $config->getString('app.name'));
-        $this->assertSame('8080', $config->getString('app.port'));
+        self::assertSame('KaririCode', $config->getString('app.name'));
+        self::assertSame('8080', $config->getString('app.port'));
     }
 
     public function testWithDotenvAcceptsEnvironmentResolverDirectly(): void
@@ -137,7 +91,7 @@ final class EcosystemIntegrationTest extends TestCase
             ])
             ->build();
 
-        $this->assertSame('db.kariricode.local', $config->getString('database.host'));
+        self::assertSame('db.kariricode.local', $config->getString('database.host'));
     }
 
     public function testWithDotenvResolverSystemFallbackDisabled(): void
@@ -172,7 +126,7 @@ final class EcosystemIntegrationTest extends TestCase
                 ->withOverrides(['val' => '${' . $key . '}'])
                 ->build();
 
-            $this->assertSame('from_system', $config->getString('val'));
+            self::assertSame('from_system', $config->getString('val'));
         } finally {
             unset($_ENV[$key]);
         }
@@ -189,6 +143,7 @@ final class EcosystemIntegrationTest extends TestCase
     public function testWithDotenvStrictModeThrowsOnUndefined(): void
     {
         $dotenv = new class {
+            /** @return array<string, string> */
             public function all(): array
             {
                 return [];
@@ -210,6 +165,7 @@ final class EcosystemIntegrationTest extends TestCase
 
         try {
             $dotenv = new class {
+                /** @return array<string, string> */
                 public function all(): array
                 {
                     return [];
@@ -221,7 +177,7 @@ final class EcosystemIntegrationTest extends TestCase
                 ->withOverrides(['val' => '${' . $key . '}'])
                 ->build();
 
-            $this->assertSame('from_system', $config->getString('val'));
+            self::assertSame('from_system', $config->getString('val'));
         } finally {
             unset($_ENV[$key]);
         }
@@ -234,6 +190,7 @@ final class EcosystemIntegrationTest extends TestCase
 
         try {
             $dotenv = new class {
+                /** @return array<string, string> */
                 public function all(): array
                 {
                     return [];
@@ -256,6 +213,7 @@ final class EcosystemIntegrationTest extends TestCase
     public function testDotenvBridgeCreatesConfiguredBuilder(): void
     {
         $dotenv = new class {
+            /** @return array<string, string> */
             public function all(): array
             {
                 return ['BRIDGE_VAR' => 'bridged'];
@@ -266,7 +224,7 @@ final class EcosystemIntegrationTest extends TestCase
             ->withOverrides(['test' => '${BRIDGE_VAR}'])
             ->build();
 
-        $this->assertSame('bridged', $config->getString('test'));
+        self::assertSame('bridged', $config->getString('test'));
     }
 
     // ── Ecosystem Provider via Canonical Interface ────────────────────
@@ -275,7 +233,7 @@ final class EcosystemIntegrationTest extends TestCase
     {
         // Provider implementing the ECOSYSTEM interface directly
         // (not the local alias) — must still work with builder
-        $provider = new class implements ConfigProviderInterface {
+        $provider = new class implements ConfigProvider {
             public function namespace(): string
             {
                 return 'queue';
@@ -296,8 +254,8 @@ final class EcosystemIntegrationTest extends TestCase
             ->withProvider($provider)
             ->build();
 
-        $this->assertSame('sync', $config->getString('queue.driver'));
-        $this->assertSame(4, $config->getInt('queue.workers'));
+        self::assertSame('sync', $config->getString('queue.driver'));
+        self::assertSame(4, $config->getInt('queue.workers'));
     }
 
     // ── Ecosystem Processor via Canonical Interface ───────────────────
@@ -305,7 +263,7 @@ final class EcosystemIntegrationTest extends TestCase
     public function testBuilderAcceptsEcosystemValueProcessor(): void
     {
         // Custom processor implementing the ECOSYSTEM interface directly
-        $uppercaseProcessor = new class implements ValueProcessorInterface {
+        $uppercaseProcessor = new class implements ValueProcessor {
             public function supports(mixed $value): bool
             {
                 return is_string($value) && str_starts_with($value, 'upper:');
@@ -313,7 +271,7 @@ final class EcosystemIntegrationTest extends TestCase
 
             public function process(mixed $value): mixed
             {
-                return strtoupper(substr($value, 6));
+                return is_string($value) ? strtoupper(substr($value, 6)) : $value;
             }
         };
 
@@ -322,7 +280,7 @@ final class EcosystemIntegrationTest extends TestCase
             ->withOverrides(['greeting' => 'upper:hello world'])
             ->build();
 
-        $this->assertSame('HELLO WORLD', $config->getString('greeting'));
+        self::assertSame('HELLO WORLD', $config->getString('greeting'));
     }
 
     // ── Full Pipeline: Dotenv + TypeCast + Encrypted ──────────────────
@@ -333,10 +291,9 @@ final class EcosystemIntegrationTest extends TestCase
         $encrypted = EncryptedValueProcessor::encrypt('s3cr3t', $encKey);
 
         $dotenv = new class ($encrypted) {
-            public function __construct(private readonly string $encVal)
-            {
-            }
+            public function __construct(private readonly string $encVal) {}
 
+            /** @return array<string, string> */
             public function all(): array
             {
                 return [
@@ -357,9 +314,9 @@ final class EcosystemIntegrationTest extends TestCase
             ->build();
 
         // Env → TypeCast pipeline: "${APP_PORT}" → "int:9090" → 9090
-        $this->assertSame(9090, $config->getInt('server.port'));
+        self::assertSame(9090, $config->getInt('server.port'));
 
         // Env → Decrypt pipeline: "${DB_SECRET}" → "ENC(...)" → "s3cr3t"
-        $this->assertSame('s3cr3t', $config->getString('database.password'));
+        self::assertSame('s3cr3t', $config->getString('database.password'));
     }
 }

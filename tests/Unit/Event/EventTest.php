@@ -38,12 +38,12 @@ final class EventTest extends TestCase
     {
         $loaded = new ConfigLoaded('/path');
         $sealed = new ConfigSealed(['key']);
-        $error = new ConfigLoadError('/path', new \Exception());
+        $error = new ConfigLoadError('/path', new \Exception('boom'));
 
         // readonly classes — properties exist and are accessible
         self::assertIsString($loaded->filePath);
         self::assertIsArray($sealed->keys);
         self::assertIsString($error->filePath);
-        self::assertInstanceOf(\Throwable::class, $error->exception);
+        self::assertSame('boom', $error->exception->getMessage());
     }
 }

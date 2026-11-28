@@ -16,7 +16,7 @@ final class ConfigurationBuilderTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->fixturesPath = dirname(__DIR__) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__) . '/Fixture/Config';
     }
 
     public function testBuildsFromDirectory(): void
@@ -25,7 +25,6 @@ final class ConfigurationBuilderTest extends TestCase
             ->withDirectory($this->fixturesPath)
             ->build();
 
-        self::assertInstanceOf(Configuration::class, $config);
         // PHP files loaded
         self::assertSame('TestApp', $config->get('app.name'));
         // JSON files loaded
@@ -93,7 +92,7 @@ final class ConfigurationBuilderTest extends TestCase
             ->withFile($this->fixturesPath . '/app.php')
             ->build();
 
-        self::assertInstanceOf(Configuration::class, $config);
+        self::assertSame('TestApp', $config->get('app.name'));
     }
 
     public function testSchemaValidation(): void

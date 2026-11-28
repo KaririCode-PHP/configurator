@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Processor;
 
 use KaririCode\Configurator\Exception\ConfigurationException;
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
+use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
  * Applies explicit type coercion directives embedded in string values.
@@ -30,7 +30,7 @@ use KaririCode\Contract\Configuration\ValueProcessorInterface;
  * @package KaririCode\Configurator
  * @since   4.1.0 ARFA 1.3
  */
-final class TypeCastProcessor implements ValueProcessorInterface
+final class TypeCastProcessor implements ValueProcessor
 {
     /** @var array<string, \Closure(string): mixed> */
     private array $casters;
@@ -40,6 +40,7 @@ final class TypeCastProcessor implements ValueProcessorInterface
         $this->casters = $this->defaultCasters();
     }
 
+    #[\Override]
     public function supports(mixed $value): bool
     {
         if (!is_string($value)) {
@@ -57,6 +58,7 @@ final class TypeCastProcessor implements ValueProcessorInterface
         return isset($this->casters[$prefix]);
     }
 
+    #[\Override]
     public function process(mixed $value): mixed
     {
         if (!is_string($value)) {
@@ -99,11 +101,11 @@ final class TypeCastProcessor implements ValueProcessorInterface
     private function defaultCasters(): array
     {
         return [
-            'int' => static fn (string $v): int => (int) $v,
+            'int' => static fn(string $v): int => (int) $v,
 
-            'float' => static fn (string $v): float => (float) $v,
+            'float' => static fn(string $v): float => (float) $v,
 
-            'bool' => static fn (string $v): bool => match (strtolower($v)) {
+            'bool' => static fn(string $v): bool => match (strtolower($v)) {
                 'true', '1', 'yes', 'on' => true,
                 'false', '0', 'no', 'off', '' => false,
                 default => throw ConfigurationException::typeCastFailed('bool', $v),
@@ -117,7 +119,7 @@ final class TypeCastProcessor implements ValueProcessorInterface
                 }
             },
 
-            'csv' => static fn (string $v): array => $v === ''
+            'csv' => static fn(string $v): array => $v === ''
                 ? []
                 : array_map('trim', explode(',', $v)),
 
@@ -141,11 +143,11 @@ final class TypeCastProcessor implements ValueProcessorInterface
                 return $content !== false ? trim($content) : '';
             },
 
-            'trim' => static fn (string $v): string => trim($v),
+            'trim' => static fn(string $v): string => trim($v),
 
-            'lower' => static fn (string $v): string => strtolower($v),
+            'lower' => static fn(string $v): string => strtolower($v),
 
-            'upper' => static fn (string $v): string => strtoupper($v),
+            'upper' => static fn(string $v): string => strtoupper($v),
         ];
     }
 }

@@ -16,7 +16,7 @@ final class YamlLoaderTest extends TestCase
     protected function setUp(): void
     {
         $this->loader = new YamlLoader();
-        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__, 2) . '/Fixture/Config';
     }
 
     // ── Basic Loading ─────────────────────────────────────────────────
@@ -26,8 +26,8 @@ final class YamlLoaderTest extends TestCase
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
         self::assertIsArray($data);
-        self::assertSame('info', $data['logging']['level']);
-        self::assertSame('json', $data['logging']['format']);
+        self::assertSame('info', self::at($data, 'logging', 'level'));
+        self::assertSame('json', self::at($data, 'logging', 'format'));
     }
 
     public function testThrowsForNonExistentFile(): void
@@ -52,9 +52,9 @@ final class YamlLoaderTest extends TestCase
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame('/var/log/app.log', $data['logging']['channels']['file']['path']);
-        self::assertSame(14, $data['logging']['channels']['file']['max_files']);
-        self::assertTrue($data['logging']['channels']['stdout']['enabled']);
+        self::assertSame('/var/log/app.log', self::at($data, 'logging', 'channels', 'file', 'path'));
+        self::assertSame(14, self::at($data, 'logging', 'channels', 'file', 'max_files'));
+        self::assertTrue(self::at($data, 'logging', 'channels', 'stdout', 'enabled'));
     }
 
     // ── Sequences ─────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ final class YamlLoaderTest extends TestCase
 
         self::assertSame(
             ['https://example.com', 'https://api.example.com'],
-            $data['security']['cors']['allowed_origins'],
+            self::at($data, 'security', 'cors', 'allowed_origins'),
         );
     }
 
@@ -75,51 +75,51 @@ final class YamlLoaderTest extends TestCase
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertNull($data['types']['null_value']);
+        self::assertNull(self::at($data, 'types', 'null_value'));
     }
 
     public function testCastsBooleanValues(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertTrue($data['types']['bool_true']);
-        self::assertFalse($data['types']['bool_false']);
+        self::assertTrue(self::at($data, 'types', 'bool_true'));
+        self::assertFalse(self::at($data, 'types', 'bool_false'));
     }
 
     public function testCastsIntegerValues(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame(42, $data['types']['integer']);
-        self::assertSame(-17, $data['types']['negative']);
+        self::assertSame(42, self::at($data, 'types', 'integer'));
+        self::assertSame(-17, self::at($data, 'types', 'negative'));
     }
 
     public function testCastsFloatValues(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame(3.14, $data['types']['float_val']);
+        self::assertSame(3.14, self::at($data, 'types', 'float_val'));
     }
 
     public function testCastsHexValues(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame(255, $data['types']['hex']);
+        self::assertSame(255, self::at($data, 'types', 'hex'));
     }
 
     public function testCastsInfinity(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame(INF, $data['types']['infinity']);
+        self::assertSame(INF, self::at($data, 'types', 'infinity'));
     }
 
     public function testPreservesQuotedStrings(): void
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame('not a bool: true', $data['types']['quoted']);
+        self::assertSame('not a bool: true', self::at($data, 'types', 'quoted'));
     }
 
     // ── Block Scalars ─────────────────────────────────────────────────
@@ -128,8 +128,10 @@ final class YamlLoaderTest extends TestCase
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertStringContainsString("This is a multi-line\n", $data['description']);
-        self::assertStringContainsString("preserved with newlines", $data['description']);
+        $description = $data['description'];
+        self::assertIsString($description);
+        self::assertStringContainsString("This is a multi-line\n", $description);
+        self::assertStringContainsString("preserved with newlines", $description);
     }
 
     public function testParsesFoldedBlockScalar(): void
@@ -137,9 +139,11 @@ final class YamlLoaderTest extends TestCase
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
         // Lines are folded into spaces; clip chomping keeps one final break.
-        self::assertStringContainsString('This text will be', $data['summary']);
-        self::assertStringNotContainsString("\n", rtrim($data['summary'], "\n"));
-        self::assertStringEndsWith("\n", $data['summary']);
+        $summary = $data['summary'];
+        self::assertIsString($summary);
+        self::assertStringContainsString('This text will be', $summary);
+        self::assertStringNotContainsString("\n", rtrim($summary, "\n"));
+        self::assertStringEndsWith("\n", $summary);
     }
 
     // ── Flow Collections ──────────────────────────────────────────────
@@ -155,8 +159,8 @@ final class YamlLoaderTest extends TestCase
     {
         $data = $this->loader->load($this->fixturesPath . '/logging.yaml');
 
-        self::assertSame('test', $data['flow_map']['name']);
-        self::assertSame(1, $data['flow_map']['version']);
+        self::assertSame('test', self::at($data, 'flow_map', 'name'));
+        self::assertSame(1, self::at($data, 'flow_map', 'version'));
     }
 
     // ── Edge Cases ────────────────────────────────────────────────────
@@ -198,5 +202,16 @@ final class YamlLoaderTest extends TestCase
         } finally {
             unlink($tempFile);
         }
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
     }
 }

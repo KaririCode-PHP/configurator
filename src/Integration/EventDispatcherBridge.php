@@ -62,48 +62,56 @@ final readonly class EventDispatcherBridge implements Configurator
     public function seal(): self
     {
         $this->inner->seal();
-        $this->dispatcher->dispatch(new ConfigSealed(array_keys($this->inner->all())));
+        $this->dispatcher->dispatch(new ConfigSealed(array_map(strval(...), array_keys($this->inner->all()))));
 
         return $this;
     }
 
     // ── Configurator contract delegation ──────────────────────────────
 
+    #[\Override]
     public function get(string $path, mixed $default = null): mixed
     {
         return $this->inner->get($path, $default);
     }
 
+    #[\Override]
     public function getString(string $path, string $default = ''): string
     {
         return $this->inner->getString($path, $default);
     }
 
+    #[\Override]
     public function getInt(string $path, int $default = 0): int
     {
         return $this->inner->getInt($path, $default);
     }
 
+    #[\Override]
     public function getFloat(string $path, float $default = 0.0): float
     {
         return $this->inner->getFloat($path, $default);
     }
 
+    #[\Override]
     public function getBool(string $path, bool $default = false): bool
     {
         return $this->inner->getBool($path, $default);
     }
 
+    #[\Override]
     public function getArray(string $path, array $default = []): array
     {
         return $this->inner->getArray($path, $default);
     }
 
+    #[\Override]
     public function has(string $path): bool
     {
         return $this->inner->has($path);
     }
 
+    #[\Override]
     public function all(): array
     {
         return $this->inner->all();

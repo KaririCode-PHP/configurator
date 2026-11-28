@@ -40,8 +40,7 @@ final readonly class CacheBridge
     public function __construct(
         private CacheInterface $cache,
         private int $ttl = 3600,
-    ) {
-    }
+    ) {}
 
     /**
      * Loads configuration with cache-through semantics.
@@ -56,6 +55,7 @@ final readonly class CacheBridge
         ?MergeStrategy $merge = null,
     ): Configuration {
         $cacheKey = $this->buildCacheKey($files, $merge);
+        /** @var mixed $cached PSR-16 get() returns mixed; checked below. */
         $cached = $this->cache->get($cacheKey);
 
         if (is_array($cached)) {

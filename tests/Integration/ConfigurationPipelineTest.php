@@ -17,7 +17,7 @@ final class ConfigurationPipelineTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->fixturesPath = dirname(__DIR__) . '/Fixture/config';
+        $this->fixturesPath = dirname(__DIR__) . '/Fixture/Config';
     }
 
     // ── Multi-Format Loading ──────────────────────────────────────────

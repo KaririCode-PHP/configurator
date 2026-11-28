@@ -53,7 +53,7 @@ final class ExceptionTest extends TestCase
     {
         $e = LoaderException::fileNotFound('/missing.php');
 
-        self::assertInstanceOf(ConfigurationException::class, $e);
+        self::assertSame(ConfigurationException::class, get_parent_class($e));
         self::assertSame(1100, $e->getCode());
     }
 
@@ -116,6 +116,5 @@ final class ExceptionTest extends TestCase
         $e = ConfigurationException::encryptionFailed('OpenSSL could not encrypt the value');
 
         self::assertSame(1009, $e->getCode());
-        self::assertInstanceOf(\RuntimeException::class, $e);
     }
 }

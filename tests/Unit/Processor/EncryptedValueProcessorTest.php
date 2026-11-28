@@ -25,18 +25,18 @@ final class EncryptedValueProcessorTest extends TestCase
     {
         $processor = new EncryptedValueProcessor($this->rawKey);
 
-        $this->assertTrue($processor->supports('ENC(dGVzdA==)'));
-        $this->assertTrue($processor->supports('ENC(abc123)'));
+        self::assertTrue($processor->supports('ENC(dGVzdA==)'));
+        self::assertTrue($processor->supports('ENC(abc123)'));
     }
 
     public function testDoesNotSupportPlainStrings(): void
     {
         $processor = new EncryptedValueProcessor($this->rawKey);
 
-        $this->assertFalse($processor->supports('plain_text'));
-        $this->assertFalse($processor->supports('ENC('));
-        $this->assertFalse($processor->supports('ENCRYPTED(data)'));
-        $this->assertFalse($processor->supports(42));
+        self::assertFalse($processor->supports('plain_text'));
+        self::assertFalse($processor->supports('ENC('));
+        self::assertFalse($processor->supports('ENCRYPTED(data)'));
+        self::assertFalse($processor->supports(42));
     }
 
     // ── Round-trip ────────────────────────────────────────────────────
@@ -47,11 +47,11 @@ final class EncryptedValueProcessorTest extends TestCase
         $plaintext = 's3cr3t_p@ssw0rd!';
 
         $encrypted = EncryptedValueProcessor::encrypt($plaintext, $this->rawKey);
-        $this->assertStringStartsWith('ENC(', $encrypted);
-        $this->assertStringEndsWith(')', $encrypted);
+        self::assertStringStartsWith('ENC(', $encrypted);
+        self::assertStringEndsWith(')', $encrypted);
 
         $decrypted = $processor->process($encrypted);
-        $this->assertSame($plaintext, $decrypted);
+        self::assertSame($plaintext, $decrypted);
     }
 
     public function testEmptyPlaintextRoundTrip(): void
@@ -61,7 +61,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $processor = new EncryptedValueProcessor($this->rawKey);
 
         $encrypted = EncryptedValueProcessor::encrypt('', $this->rawKey);
-        $this->assertSame('', $processor->process($encrypted));
+        self::assertSame('', $processor->process($encrypted));
     }
 
     public function testUnicodePlaintextRoundTrip(): void
@@ -70,7 +70,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $plaintext = 'senha_çãõ_日本語_🔐';
 
         $encrypted = EncryptedValueProcessor::encrypt($plaintext, $this->rawKey);
-        $this->assertSame($plaintext, $processor->process($encrypted));
+        self::assertSame($plaintext, $processor->process($encrypted));
     }
 
     public function testRoundTripWithHexKey(): void
@@ -81,7 +81,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $encrypted = EncryptedValueProcessor::encrypt($plaintext, $this->hexKey);
         $decrypted = $processor->process($encrypted);
 
-        $this->assertSame($plaintext, $decrypted);
+        self::assertSame($plaintext, $decrypted);
     }
 
     public function testDifferentPlaintextsProduceDifferentCiphertext(): void
@@ -89,7 +89,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $enc1 = EncryptedValueProcessor::encrypt('password1', $this->rawKey);
         $enc2 = EncryptedValueProcessor::encrypt('password2', $this->rawKey);
 
-        $this->assertNotSame($enc1, $enc2);
+        self::assertNotSame($enc1, $enc2);
     }
 
     public function testSamePlaintextProducesDifferentCiphertext(): void
@@ -98,7 +98,7 @@ final class EncryptedValueProcessorTest extends TestCase
         $enc1 = EncryptedValueProcessor::encrypt('same', $this->rawKey);
         $enc2 = EncryptedValueProcessor::encrypt('same', $this->rawKey);
 
-        $this->assertNotSame($enc1, $enc2);
+        self::assertNotSame($enc1, $enc2);
     }
 
     // ── Error cases ───────────────────────────────────────────────────
@@ -161,6 +161,6 @@ final class EncryptedValueProcessorTest extends TestCase
     {
         $processor = new EncryptedValueProcessor($this->rawKey);
 
-        $this->assertSame(42, $processor->process(42));
+        self::assertSame(42, $processor->process(42));
     }
 }

@@ -33,8 +33,8 @@ final class RecursiveMergeTest extends TestCase
             ['db' => ['host' => 'prod.db.com']],
         );
 
-        self::assertSame('prod.db.com', $result['db']['host']);
-        self::assertSame(5432, $result['db']['port']);
+        self::assertSame('prod.db.com', self::at($result, 'db', 'host'));
+        self::assertSame(5432, self::at($result, 'db', 'port'));
     }
 
     public function testReplacesSequentialArrays(): void
@@ -86,7 +86,18 @@ final class RecursiveMergeTest extends TestCase
             ['a' => ['b' => ['c' => 99]]],
         );
 
-        self::assertSame(99, $result['a']['b']['c']);
-        self::assertSame(2, $result['a']['b']['d']);
+        self::assertSame(99, self::at($result, 'a', 'b', 'c'));
+        self::assertSame(2, self::at($result, 'a', 'b', 'd'));
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
     }
 }

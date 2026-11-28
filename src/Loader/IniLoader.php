@@ -34,6 +34,7 @@ use KaririCode\Configurator\Exception\LoaderException;
  */
 final readonly class IniLoader implements Loader
 {
+    #[\Override]
     public function load(string $path): array
     {
         if (!is_file($path) || !is_readable($path)) {
@@ -67,6 +68,7 @@ final readonly class IniLoader implements Loader
         return $this->expandDottedKeys($parsed);
     }
 
+    #[\Override]
     public function supports(string $extension): bool
     {
         return $extension === 'ini';
@@ -77,70 +79,42 @@ final readonly class IniLoader implements Loader
     /**
      * Expands dotted keys into nested arrays, recursing into sections.
      *
+     * Each entry becomes a one-path tree; the trees are then replaced
+     * recursively in file order, so "a.b" and "a.c" coexist under "a"
+     * and a later scalar overwrites an earlier one.
+     *
      * @param array<array-key, mixed> $data
      *
      * @return array<array-key, mixed>
      */
     private function expandDottedKeys(array $data): array
     {
-        $result = [];
+        $trees = [];
 
+        /** @var mixed $value INI values are untyped; sections arrive as arrays */
         foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $value = $this->expandDottedKeys($value);
-            }
-
-            if (is_string($key) && str_contains($key, '.')) {
-                $this->setNested($result, explode('.', $key), $value);
-
-                continue;
-            }
-
-            $result[$key] = $this->mergeValue($result[$key] ?? null, $value);
+            $path = is_string($key) ? explode('.', $key) : [$key];
+            $trees[] = $this->nest($path, is_array($value) ? $this->expandDottedKeys($value) : $value);
         }
 
-        return $result;
+        return array_replace_recursive([], ...$trees);
     }
 
     /**
-     * Writes a value at a nested path, creating intermediate arrays.
+     * Wraps a value in one nested array per path segment.
      *
-     * @param array<array-key, mixed> $target
-     * @param list<string>         $segments
+     * @param non-empty-list<array-key> $path
+     *
+     * @return array<array-key, mixed>
      */
-    private function setNested(array &$target, array $segments, mixed $value): void
+    private function nest(array $path, mixed $value): array
     {
-        $cursor = &$target;
+        $tree = [array_pop($path) => $value];
 
-        foreach ($segments as $depth => $segment) {
-            if ($depth === count($segments) - 1) {
-                $cursor[$segment] = $this->mergeValue($cursor[$segment] ?? null, $value);
-
-                return;
-            }
-
-            if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
-                $cursor[$segment] = [];
-            }
-
-            $cursor = &$cursor[$segment];
-        }
-    }
-
-    /**
-     * Merges nested arrays produced by overlapping dotted keys so that
-     * "a.b" and "a.c" coexist under "a" instead of overwriting.
-     */
-    private function mergeValue(mixed $existing, mixed $incoming): mixed
-    {
-        if (is_array($existing) && is_array($incoming)) {
-            foreach ($incoming as $k => $v) {
-                $existing[$k] = $this->mergeValue($existing[$k] ?? null, $v);
-            }
-
-            return $existing;
+        foreach (array_reverse($path) as $segment) {
+            $tree = [$segment => $tree];
         }
 
-        return $incoming;
+        return $tree;
     }
 }

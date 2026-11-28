@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Environment;
 
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * Chains multiple resolvers in priority order (first match wins).
@@ -17,16 +17,17 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * @package KaririCode\Configurator
  * @since   4.2.0 ARFA 1.3
  */
-final readonly class CompositeEnvironmentResolver implements EnvironmentResolverInterface
+final readonly class CompositeEnvironmentResolver implements EnvironmentResolver
 {
-    /** @var list<EnvironmentResolverInterface> */
+    /** @var list<EnvironmentResolver> */
     private array $resolvers;
 
-    public function __construct(EnvironmentResolverInterface ...$resolvers)
+    public function __construct(EnvironmentResolver ...$resolvers)
     {
         $this->resolvers = array_values($resolvers);
     }
 
+    #[\Override]
     public function get(string $name): ?string
     {
         foreach ($this->resolvers as $resolver) {
@@ -40,11 +41,12 @@ final readonly class CompositeEnvironmentResolver implements EnvironmentResolver
         return null;
     }
 
+    #[\Override]
     public function has(string $name): bool
     {
         return array_any(
             $this->resolvers,
-            static fn (EnvironmentResolverInterface $resolver): bool => $resolver->has($name),
+            static fn(EnvironmentResolver $resolver): bool => $resolver->has($name),
         );
     }
 }

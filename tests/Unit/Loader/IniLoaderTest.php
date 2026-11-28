@@ -22,7 +22,7 @@ final class IniLoaderTest extends TestCase
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->fixtureDir . '/*') ?: []);
+        array_map('unlink', self::filesIn($this->fixtureDir . '/*'));
         rmdir($this->fixtureDir);
     }
 
@@ -41,8 +41,8 @@ final class IniLoaderTest extends TestCase
     {
         $result = $this->load("[database]\nhost = localhost\nport = 5432\n");
 
-        self::assertSame('localhost', $result['database']['host']);
-        self::assertSame(5432, $result['database']['port']);
+        self::assertSame('localhost', self::at($result, 'database', 'host'));
+        self::assertSame(5432, self::at($result, 'database', 'port'));
     }
 
     public function testTypedScanningCastsScalars(): void
@@ -51,20 +51,20 @@ final class IniLoaderTest extends TestCase
             "[app]\ndebug = true\nworkers = 4\nratio = 1.5\nname = kariri\n",
         );
 
-        self::assertTrue($result['app']['debug']);
-        self::assertSame(4, $result['app']['workers']);
-        self::assertSame(1.5, $result['app']['ratio']);
-        self::assertSame('kariri', $result['app']['name']);
+        self::assertTrue(self::at($result, 'app', 'debug'));
+        self::assertSame(4, self::at($result, 'app', 'workers'));
+        self::assertSame(1.5, self::at($result, 'app', 'ratio'));
+        self::assertSame('kariri', self::at($result, 'app', 'name'));
     }
 
     public function testBooleanKeywordsAreTyped(): void
     {
         $result = $this->load("[flags]\na = yes\nb = no\nc = on\nd = off\n");
 
-        self::assertTrue($result['flags']['a']);
-        self::assertFalse($result['flags']['b']);
-        self::assertTrue($result['flags']['c']);
-        self::assertFalse($result['flags']['d']);
+        self::assertTrue(self::at($result, 'flags', 'a'));
+        self::assertFalse(self::at($result, 'flags', 'b'));
+        self::assertTrue(self::at($result, 'flags', 'c'));
+        self::assertFalse(self::at($result, 'flags', 'd'));
     }
 
     // ── Dotted-Key Expansion ──────────────────────────────────────────
@@ -73,32 +73,32 @@ final class IniLoaderTest extends TestCase
     {
         $result = $this->load("database.host = localhost\ndatabase.port = 5432\n");
 
-        self::assertSame('localhost', $result['database']['host']);
-        self::assertSame(5432, $result['database']['port']);
+        self::assertSame('localhost', self::at($result, 'database', 'host'));
+        self::assertSame(5432, self::at($result, 'database', 'port'));
     }
 
     public function testDottedKeysInsideSectionExpand(): void
     {
         $result = $this->load("[cache]\nredis.host = 127.0.0.1\nredis.db = 2\n");
 
-        self::assertSame('127.0.0.1', $result['cache']['redis']['host']);
-        self::assertSame(2, $result['cache']['redis']['db']);
+        self::assertSame('127.0.0.1', self::at($result, 'cache', 'redis', 'host'));
+        self::assertSame(2, self::at($result, 'cache', 'redis', 'db'));
     }
 
     public function testOverlappingDottedKeysMergeNotOverwrite(): void
     {
         $result = $this->load("service.host = web1\nservice.port = 80\nservice.tls = true\n");
 
-        self::assertSame('web1', $result['service']['host']);
-        self::assertSame(80, $result['service']['port']);
-        self::assertTrue($result['service']['tls']);
+        self::assertSame('web1', self::at($result, 'service', 'host'));
+        self::assertSame(80, self::at($result, 'service', 'port'));
+        self::assertTrue(self::at($result, 'service', 'tls'));
     }
 
     public function testDeeplyNestedDottedKey(): void
     {
         $result = $this->load("a.b.c.d = deep\n");
 
-        self::assertSame('deep', $result['a']['b']['c']['d']);
+        self::assertSame('deep', self::at($result, 'a', 'b', 'c', 'd'));
     }
 
     // ── Errors ────────────────────────────────────────────────────────
@@ -120,11 +120,31 @@ final class IniLoaderTest extends TestCase
 
     // ── Utility ───────────────────────────────────────────────────────
 
+    /** @return array<mixed> */
     private function load(string $content): array
     {
         $path = $this->fixtureDir . '/config.ini';
         file_put_contents($path, $content);
 
         return $this->loader->load($path);
+    }
+
+    /** A nested value of a loaded array, read without assuming its shape. */
+    private static function at(mixed $data, string|int ...$path): mixed
+    {
+        foreach ($path as $key) {
+            self::assertIsArray($data);
+            $data = $data[$key] ?? null;
+        }
+
+        return $data;
+    }
+
+    /** @return list<string> */
+    private static function filesIn(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
     }
 }

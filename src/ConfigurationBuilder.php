@@ -11,9 +11,9 @@ use KaririCode\Configurator\MergeStrategy\RecursiveMerge;
 use KaririCode\Configurator\Processor\EnvironmentProcessor;
 use KaririCode\Configurator\Processor\ValueProcessorChain;
 use KaririCode\Configurator\Validator\SchemaValidator;
-use KaririCode\Contract\Configuration\ConfigProviderInterface;
-use KaririCode\Contract\Configuration\ValueProcessorInterface;
-use KaririCode\Contract\Environment\EnvironmentResolverInterface;
+use KaririCode\Contract\Configuration\ConfigProvider;
+use KaririCode\Contract\Configuration\ValueProcessor;
+use KaririCode\Contract\Environment\EnvironmentResolver;
 
 /**
  * Fluent builder for Configuration instances.
@@ -25,8 +25,8 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  * and optional schema validation.
  *
  * Ecosystem integration (V4.2):
- *   - Accepts EnvironmentResolverInterface from kariricode/contract
- *   - Accepts ConfigProviderInterface from kariricode/contract
+ *   - Accepts EnvironmentResolver from kariricode/contract
+ *   - Accepts ConfigProvider from kariricode/contract
  *   - withDotenv() enables one-line integration with kariricode/dotenv
  *   - Backward compatible: local Contract aliases still accepted
  *
@@ -53,6 +53,9 @@ use KaririCode\Contract\Environment\EnvironmentResolverInterface;
  */
 final class ConfigurationBuilder
 {
+    /** Extensions withDirectory() picks up, in load order per directory. */
+    private const array SUPPORTED_EXTENSIONS = ['php', 'json', 'yaml', 'yml', 'ini', 'toml'];
+
     private MergeStrategy $mergeStrategy;
     private ?ConfigValidator $validator = null;
 
@@ -70,7 +73,7 @@ final class ConfigurationBuilder
     /** @var list<array{Loader, list<string>}> */
     private array $customLoaders = [];
 
-    /** @var list<ConfigProviderInterface> */
+    /** @var list<ConfigProvider> */
     private array $providers = [];
 
     private ValueProcessorChain $processorChain;
@@ -129,7 +132,7 @@ final class ConfigurationBuilder
     /**
      * Registers an ecosystem config provider.
      *
-     * Accepts both the ecosystem ConfigProviderInterface and the
+     * Accepts both the ecosystem ConfigProvider and the
      * local backward-compatible alias.
      *
      * Provider defaults are merged before user-supplied files,
@@ -137,7 +140,7 @@ final class ConfigurationBuilder
      * schemas are accumulated and merged with any explicit
      * schema set via withSchema().
      */
-    public function withProvider(ConfigProviderInterface $provider): self
+    public function withProvider(ConfigProvider $provider): self
     {
         $this->providers[] = $provider;
 
@@ -155,10 +158,10 @@ final class ConfigurationBuilder
     /**
      * Adds a value processor to the processing chain.
      *
-     * Accepts both the ecosystem ValueProcessorInterface and the
+     * Accepts both the ecosystem ValueProcessor and the
      * local backward-compatible alias.
      */
-    public function withValueProcessor(ValueProcessorInterface $processor): self
+    public function withValueProcessor(ValueProcessor $processor): self
     {
         $this->processorChain->add($processor);
 
@@ -172,11 +175,11 @@ final class ConfigurationBuilder
      * This is the most commonly needed processor — the explicit method
      * makes it discoverable and documents the feature prominently.
      *
-     * @param EnvironmentResolverInterface|null $resolver Custom env resolver (defaults to system)
+     * @param EnvironmentResolver|null $resolver Custom env resolver (defaults to system)
      * @param bool                              $strict   Throw on undefined vars without defaults
      */
     public function withEnvInterpolation(
-        ?EnvironmentResolverInterface $resolver = null,
+        ?EnvironmentResolver $resolver = null,
         bool $strict = true,
     ): self {
         $this->processorChain->add(
@@ -190,7 +193,7 @@ final class ConfigurationBuilder
      * Integrates with KaririCode\Dotenv for .env-based interpolation.
      *
      * Accepts any object with an all() method that returns loaded
-     * environment variables, or an EnvironmentResolverInterface directly.
+     * environment variables, or an EnvironmentResolver directly.
      *
      * This is the recommended way to integrate Dotenv with Configurator.
      *
@@ -202,7 +205,7 @@ final class ConfigurationBuilder
      *       ->withDotenv($dotenv)
      *       ->build();
      *
-     * @param object|EnvironmentResolverInterface $dotenv         Dotenv instance or pre-built resolver
+     * @param object|EnvironmentResolver $dotenv         Dotenv instance or pre-built resolver
      * @param bool                                $strict         Throw on undefined vars without defaults
      * @param bool                                $systemFallback Fall back to system env when Dotenv has no value
      *
@@ -213,7 +216,7 @@ final class ConfigurationBuilder
         bool $strict = true,
         bool $systemFallback = true,
     ): self {
-        if ($dotenv instanceof EnvironmentResolverInterface) {
+        if ($dotenv instanceof EnvironmentResolver) {
             $resolver = $systemFallback
                 ? new Environment\CompositeEnvironmentResolver($dotenv, new Environment\SystemEnvironmentResolver())
                 : $dotenv;
@@ -225,7 +228,7 @@ final class ConfigurationBuilder
             throw new \InvalidArgumentException(
                 sprintf(
                     'withDotenv() expects a Dotenv instance with all() method '
-                    . 'or an EnvironmentResolverInterface, got %s.',
+                    . 'or an EnvironmentResolver, got %s.',
                     get_debug_type($dotenv),
                 ),
             );
@@ -371,8 +374,6 @@ final class ConfigurationBuilder
 
     private function loadDirectories(Configuration $config): void
     {
-        $supportedExtensions = ['php', 'json', 'yaml', 'yml', 'ini', 'toml'];
-
         foreach ($this->directories as $directory) {
             if (str_contains($directory, '*')) {
                 $this->loadGlob($config, $directory);
@@ -384,38 +385,51 @@ final class ConfigurationBuilder
                 continue;
             }
 
-            $baseFiles = [];
-            $envFiles = [];
+            [$baseFiles, $envFiles] = $this->filesOf($directory);
+            $this->loadSorted($config, $baseFiles);
+            $this->loadSorted($config, $envFiles);
+        }
+    }
 
-            foreach ($supportedExtensions as $ext) {
-                foreach (glob("{$directory}/*.{$ext}") ?: [] as $file) {
-                    $basename = pathinfo($file, PATHINFO_FILENAME);
+    /**
+     * The configuration files of a directory: base files, and the files of
+     * the selected environment (`app.production.php`), which load after.
+     *
+     * @return array{list<string>, list<string>}
+     */
+    private function filesOf(string $directory): array
+    {
+        $baseFiles = [];
+        $envFiles = [];
 
-                    if ($this->environment !== null && str_ends_with($basename, ".{$this->environment}")) {
-                        $envFiles[] = $file;
-                    } else {
-                        $baseFiles[] = $file;
-                    }
+        foreach (self::SUPPORTED_EXTENSIONS as $extension) {
+            foreach ($this->globFiles("{$directory}/*.{$extension}") as $file) {
+                $basename = pathinfo($file, PATHINFO_FILENAME);
+
+                if ($this->environment !== null && str_ends_with($basename, ".{$this->environment}")) {
+                    $envFiles[] = $file;
+                } else {
+                    $baseFiles[] = $file;
                 }
             }
+        }
 
-            sort($baseFiles);
+        return [$baseFiles, $envFiles];
+    }
 
-            foreach ($baseFiles as $file) {
-                $config->load($file);
-            }
+    /** @param list<string> $files */
+    private function loadSorted(Configuration $config, array $files): void
+    {
+        sort($files);
 
-            sort($envFiles);
-
-            foreach ($envFiles as $file) {
-                $config->load($file);
-            }
+        foreach ($files as $file) {
+            $config->load($file);
         }
     }
 
     private function loadGlob(Configuration $config, string $pattern): void
     {
-        $files = glob($pattern) ?: [];
+        $files = $this->globFiles($pattern);
         sort($files);
 
         foreach ($files as $file) {
@@ -423,6 +437,14 @@ final class ConfigurationBuilder
                 $config->load($file);
             }
         }
+    }
+
+    /** @return list<string> */
+    private function globFiles(string $pattern): array
+    {
+        $files = glob($pattern);
+
+        return $files === false ? [] : $files;
     }
 
     private function loadFiles(Configuration $config): void
