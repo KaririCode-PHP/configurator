@@ -47,22 +47,23 @@ final readonly class IniLoader implements Loader
             throw LoaderException::fileUnreadable($path);
         }
 
-        // Convert parse warnings into a clean, catchable failure instead
-        // of suppressing them with the @ operator.
-        set_error_handler(static function (int $severity, string $message): never {
-            throw new \ErrorException($message, 0, $severity);
+        // Capture parse warnings as the failure's reason instead of
+        // suppressing them with the @ operator; any warning fails the load.
+        $warning = null;
+        set_error_handler(static function (int $severity, string $message) use (&$warning): bool {
+            $warning = $message;
+
+            return true;
         });
 
         try {
             $parsed = parse_ini_string($content, true, INI_SCANNER_TYPED);
-        } catch (\ErrorException $exception) {
-            throw LoaderException::parseError($path, $exception->getMessage());
         } finally {
             restore_error_handler();
         }
 
-        if ($parsed === false) {
-            throw LoaderException::parseError($path, 'malformed INI syntax');
+        if ($parsed === false || $warning !== null) {
+            throw LoaderException::parseError($path, $warning ?? 'malformed INI syntax');
         }
 
         return $this->expandDottedKeys($parsed);

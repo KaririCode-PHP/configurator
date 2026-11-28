@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Loader;
 
 use KaririCode\Configurator\Contract\Loader;
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\ConfigCode;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
@@ -19,12 +19,12 @@ use KaririCode\Configurator\Exception\LoaderException;
  * floats including inf/nan; booleans; arrays (nested, multi-line,
  * trailing comma); and single-line inline tables.
  *
- * Invalid documents are rejected with LoaderException (code 1102) and
+ * Invalid documents are rejected with LoaderException (code CFG_2820) and
  * the offending line: unquoted strings, malformed numbers, duplicate
  * keys or tables, and keys that would extend a value are errors, never
  * silent reinterpretations.
  *
- * Unsupported features fail with ConfigurationException (code 1008)
+ * Unsupported features fail with LoaderException (code CFG_2823)
  * (ADR-008, mirroring the YAML parser in ADR-002):
  *   - Arrays of tables ([[table]])
  *   - Multi-line strings (""" and ''')
@@ -68,8 +68,10 @@ final readonly class TomlLoader implements Loader
 
         try {
             return $this->parse($content);
-        } catch (\UnexpectedValueException $exception) {
-            throw LoaderException::parseError($path, $exception->getMessage());
+        } catch (LoaderException $exception) {
+            throw $exception->errorCode === ConfigCode::ParseError
+                ? LoaderException::parseError(path: $path, reason: $exception->reason, previous: $exception)
+                : $exception;
         }
     }
 
@@ -84,8 +86,8 @@ final readonly class TomlLoader implements Loader
     /**
      * @return array<array-key, mixed>
      *
-     * @throws ConfigurationException    When an unsupported feature is found
-     * @throws \UnexpectedValueException When the document is not valid TOML
+     * @throws LoaderException    When an unsupported feature is found
+     * @throws LoaderException When the document is not valid TOML
      */
     private function parse(string $toml): array
     {
@@ -118,18 +120,16 @@ final readonly class TomlLoader implements Loader
                 $equals = strpos($this->maskStrings($line), '=');
 
                 if ($equals === false) {
-                    throw new \UnexpectedValueException("expected 'key = value'");
+                    throw LoaderException::invalidSyntax("expected 'key = value'");
                 }
 
                 $key = $this->parseKey(substr($line, 0, $equals));
                 [$valueText, $index] = $this->collectValue(trim(substr($line, $equals + 1)), $lines, $index);
                 $document->assign($table, $key, $this->parseValue($valueText, $lineNumber));
-            } catch (\UnexpectedValueException $exception) {
-                throw new \UnexpectedValueException(
-                    sprintf('%s on line %d', $exception->getMessage(), $lineNumber),
-                    0,
-                    $exception,
-                );
+            } catch (LoaderException $exception) {
+                throw $exception->errorCode === ConfigCode::ParseError
+                    ? LoaderException::invalidSyntax(sprintf('%s on line %d', $exception->reason, $lineNumber))
+                    : $exception;
             }
         }
 
@@ -137,19 +137,19 @@ final readonly class TomlLoader implements Loader
     }
 
     /**
-     * @throws ConfigurationException
+     * @throws LoaderException
      */
     private function detectUnsupportedSyntax(string $line, int $lineNumber): void
     {
         if (str_starts_with($line, '[[')) {
-            throw ConfigurationException::unsupportedTomlFeature(
+            throw LoaderException::unsupportedTomlFeature(
                 'TOML arrays of tables ([[table]]) are not supported',
                 $lineNumber,
             );
         }
 
         if (str_contains($line, '"""') || str_contains($line, "'''")) {
-            throw ConfigurationException::unsupportedTomlFeature(
+            throw LoaderException::unsupportedTomlFeature(
                 'TOML multi-line strings (""" or \'\'\') are not supported',
                 $lineNumber,
             );
@@ -163,7 +163,7 @@ final readonly class TomlLoader implements Loader
      *
      * @return array{0: string, 1: int} the value text and the index of its last line
      *
-     * @throws \UnexpectedValueException When the array is never closed
+     * @throws LoaderException When the array is never closed
      */
     private function collectValue(string $value, array $lines, int $index): array
     {
@@ -175,7 +175,7 @@ final readonly class TomlLoader implements Loader
 
         while ($this->bracketDepth($value) > 0) {
             if (++$index >= $count) {
-                throw new \UnexpectedValueException('unterminated array');
+                throw LoaderException::invalidSyntax('unterminated array');
             }
 
             $value .= "\n" . trim($this->stripComment($lines[$index]));
@@ -189,12 +189,12 @@ final readonly class TomlLoader implements Loader
     /**
      * @return non-empty-list<string>
      *
-     * @throws \UnexpectedValueException When the header is malformed
+     * @throws LoaderException When the header is malformed
      */
     private function parseTableHeader(string $line): array
     {
         if (!str_ends_with($line, ']')) {
-            throw new \UnexpectedValueException(sprintf("malformed table header '%s'", $line));
+            throw LoaderException::invalidSyntax(sprintf("malformed table header '%s'", $line));
         }
 
         return $this->parseKey(substr($line, 1, -1));
@@ -207,7 +207,7 @@ final readonly class TomlLoader implements Loader
      *
      * @return non-empty-list<string>
      *
-     * @throws \UnexpectedValueException When the key is malformed
+     * @throws LoaderException When the key is malformed
      */
     private function parseKey(string $key): array
     {
@@ -223,7 +223,7 @@ final readonly class TomlLoader implements Loader
                 $close = $this->closingQuote($key, $position);
 
                 if ($close === -1) {
-                    throw new \UnexpectedValueException(sprintf("unterminated quoted key '%s'", trim($key)));
+                    throw LoaderException::invalidSyntax(sprintf("unterminated quoted key '%s'", trim($key)));
                 }
 
                 $segments[] = $this->decodeString(substr($key, $position, $close - $position + 1));
@@ -232,7 +232,7 @@ final readonly class TomlLoader implements Loader
                 $segments[] = $match[0];
                 $position += strlen($match[0]);
             } else {
-                throw new \UnexpectedValueException(sprintf("invalid key '%s'", trim($key)));
+                throw LoaderException::invalidSyntax(sprintf("invalid key '%s'", trim($key)));
             }
 
             $position = $this->skipWhitespace($key, $position);
@@ -242,7 +242,7 @@ final readonly class TomlLoader implements Loader
             }
 
             if ($key[$position] !== '.') {
-                throw new \UnexpectedValueException(sprintf("invalid key '%s'", trim($key)));
+                throw LoaderException::invalidSyntax(sprintf("invalid key '%s'", trim($key)));
             }
 
             ++$position;
@@ -254,20 +254,20 @@ final readonly class TomlLoader implements Loader
     /**
      * @return string|int|float|bool|array<array-key, mixed>
      *
-     * @throws ConfigurationException    When the value is a date/time
-     * @throws \UnexpectedValueException When the value is not valid TOML
+     * @throws LoaderException    When the value is a date/time
+     * @throws LoaderException When the value is not valid TOML
      */
     private function parseValue(string $value, int $lineNumber): string|int|float|bool|array
     {
         $first = $value[0] ?? '';
 
         if ($first === '') {
-            throw new \UnexpectedValueException('missing value');
+            throw LoaderException::invalidSyntax('missing value');
         }
 
         if ($first === '"' || $first === "'") {
             if ($this->closingQuote($value, 0) !== strlen($value) - 1) {
-                throw new \UnexpectedValueException(sprintf('invalid string %s', $value));
+                throw LoaderException::invalidSyntax('invalid string (unterminated, or text after the closing quote)');
             }
 
             return $this->decodeString($value);
@@ -282,7 +282,7 @@ final readonly class TomlLoader implements Loader
         }
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}|^\d{2}:\d{2}:\d{2}/', $value) === 1) {
-            throw ConfigurationException::unsupportedTomlFeature(
+            throw LoaderException::unsupportedTomlFeature(
                 'TOML date/time values are not supported — quote them as strings',
                 $lineNumber,
             );
@@ -299,7 +299,7 @@ final readonly class TomlLoader implements Loader
     }
 
     /**
-     * @throws \UnexpectedValueException When the text is not a TOML number or overflows 64 bits
+     * @throws LoaderException When the text is not a TOML number or overflows 64 bits
      */
     private function parseNumber(string $value): int|float
     {
@@ -330,16 +330,16 @@ final readonly class TomlLoader implements Loader
             return (float) str_replace('_', '', $value);
         }
 
-        throw new \UnexpectedValueException(sprintf("invalid value '%s' (strings must be quoted)", $value));
+        throw LoaderException::invalidSyntax('invalid value (strings must be quoted)');
     }
 
     /**
-     * @throws \UnexpectedValueException When the number does not fit in a 64-bit integer
+     * @throws LoaderException When the number does not fit in a 64-bit integer
      */
     private function toInteger(int|float $number, string $source): int
     {
         if (!is_int($number)) {
-            throw new \UnexpectedValueException(sprintf("integer '%s' does not fit in 64 bits", $source));
+            throw LoaderException::invalidSyntax('integer does not fit in 64 bits');
         }
 
         return $number;
@@ -348,14 +348,14 @@ final readonly class TomlLoader implements Loader
     /**
      * Decodes a complete quoted token: '...' literally, "..." with escapes.
      *
-     * @throws \UnexpectedValueException On control characters or invalid escapes
+     * @throws LoaderException On control characters or invalid escapes
      */
     private function decodeString(string $token): string
     {
         $body = substr($token, 1, -1);
 
         if (preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $body) === 1) {
-            throw new \UnexpectedValueException('control characters must be escaped in strings');
+            throw LoaderException::invalidSyntax('control characters must be escaped in strings');
         }
 
         if ($token[0] === "'") {
@@ -383,13 +383,13 @@ final readonly class TomlLoader implements Loader
             $width = match ($escape) {
                 'u' => 4,
                 'U' => 8,
-                default => throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s'", $escape)),
+                default => throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s'", $escape)),
             };
 
             $hex = substr($body, $i + 1, $width);
 
             if (preg_match('/^[0-9A-Fa-f]{' . $width . '}$/', $hex) !== 1) {
-                throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s%s'", $escape, $hex));
+                throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s': expected %d hexadecimal digits", $escape, $width));
             }
 
             $result .= $this->encodeCodePoint((int) hexdec($hex));
@@ -402,7 +402,7 @@ final readonly class TomlLoader implements Loader
     /**
      * @return list<string|int|float|bool|array<array-key, mixed>>
      *
-     * @throws \UnexpectedValueException When the array is malformed
+     * @throws LoaderException When the array is malformed
      */
     private function parseArray(string $value, int $lineNumber): array
     {
@@ -417,14 +417,14 @@ final readonly class TomlLoader implements Loader
     /**
      * @return array<array-key, mixed>
      *
-     * @throws \UnexpectedValueException When the inline table is malformed or repeats a key
+     * @throws LoaderException When the inline table is malformed or repeats a key
      */
     private function parseInlineTable(string $value, int $lineNumber): array
     {
         $this->assertClosesAtEnd($value);
 
         if (str_contains($value, "\n")) {
-            throw new \UnexpectedValueException('inline tables must be on a single line');
+            throw LoaderException::invalidSyntax('inline tables must be on a single line');
         }
 
         $table = new TomlDocument();
@@ -433,7 +433,7 @@ final readonly class TomlLoader implements Loader
             $equals = strpos($this->maskStrings($entry), '=');
 
             if ($equals === false) {
-                throw new \UnexpectedValueException(sprintf("expected 'key = value' in inline table, got '%s'", $entry));
+                throw LoaderException::invalidSyntax("expected 'key = value' in an inline table");
             }
 
             $key = $this->parseKey(substr($entry, 0, $equals));
@@ -449,7 +449,7 @@ final readonly class TomlLoader implements Loader
      *
      * @return list<string>
      *
-     * @throws \UnexpectedValueException On an empty item
+     * @throws LoaderException On an empty item
      */
     private function splitItems(string $inner, bool $trailingComma): array
     {
@@ -485,14 +485,14 @@ final readonly class TomlLoader implements Loader
         }
 
         if (in_array('', $pieces, true)) {
-            throw new \UnexpectedValueException("unexpected ',' (empty item)");
+            throw LoaderException::invalidSyntax("unexpected ',' (empty item)");
         }
 
         return $pieces;
     }
 
     /**
-     * @throws \UnexpectedValueException When text follows the closing bracket
+     * @throws LoaderException When text follows the closing bracket
      */
     private function assertClosesAtEnd(string $value): void
     {
@@ -508,12 +508,12 @@ final readonly class TomlLoader implements Loader
             };
 
             if ($depth === 0 && $i < $last) {
-                throw new \UnexpectedValueException(sprintf("unexpected text after '%s'", substr($value, 0, $i + 1)));
+                throw LoaderException::invalidSyntax('unexpected text after a closing bracket');
             }
         }
 
         if ($depth !== 0) {
-            throw new \UnexpectedValueException(sprintf("unbalanced brackets in '%s'", $value));
+            throw LoaderException::invalidSyntax('unbalanced brackets');
         }
     }
 

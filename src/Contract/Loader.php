@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Contract;
 
-use KaririCode\Configurator\Exception\ConfigurationException;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
@@ -27,11 +26,11 @@ interface Loader
      *
      * @return array<array-key, mixed> Parsed configuration data
      *
-     * @throws LoaderException        When the file is missing, unreadable, or malformed
-     *                                (custom loaders that confine paths may use
-     *                                LoaderException::pathTraversal(), code 1104)
-     * @throws ConfigurationException When the file uses a syntax feature the loader
-     *                                does not support (YAML: 1007, TOML: 1008)
+     * @throws LoaderException When the file is missing, unreadable or malformed
+     *                         (CFG_2811, CFG_2812, CFG_2820), or uses a syntax
+     *                         feature the loader does not support (YAML:
+     *                         CFG_2822, TOML: CFG_2823); custom loaders that
+     *                         confine paths may use pathTraversal() (CFG_2813)
      */
     public function load(string $path): array;
 

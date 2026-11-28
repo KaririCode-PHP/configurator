@@ -4,113 +4,47 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Exception;
 
+use KaririCode\Contract\Exception\ExceptionInterface;
+use KaririCode\Exception\ErrorCode;
+
+// ── Exception: ConfigurationException ────────────────────────────────
+// Marker of every exception the package throws.
+// ─────────────────────────────────────────────────────────────────────
+
 /**
- * Base exception for all configuration errors.
+ * The marker every exception of kariricode/configurator implements, so
+ * one `catch` covers the package, as the base class of the same name did
+ * in the 4.2 tarball; each concrete exception also extends the
+ * kariricode/exception base of the Configuration family and carries a
+ * ConfigCode case in `$errorCode`.
  *
- * Error code ranges:
- *   1000–1009  General configuration errors
- *   1100–1199  Loader errors (file I/O, parsing)
- *   1200–1299  Validation errors (schema, type)
- *   1300–1399  Merge errors
+ * Every failure of the package is a configuration that an operator
+ * fixes: a file, a value, a key or a schema. The HTTP edge answers 500
+ * and keeps the detail in the logs; messages name files, keys and types,
+ * never configuration values.
  *
- * @package KaririCode\Configurator
- * @since   4.0.0 ARFA 1.3
+ * Preconditions: implemented only by the final exceptions of this
+ * namespace.
+ *
+ * Thread-safety: an interface; no state.
+ *
+ * Side effects: none.
+ *
+ * Example:
+ *
+ *     try {
+ *         $config = ConfigurationBuilder::create()->withDirectory('/app/config')->build();
+ *     } catch (ConfigurationException $e) {
+ *         fwrite(STDERR, $e->getMessage() . "\n"); // [CFG_28xx] …, no configuration values
+ *     }
+ *
+ * References: ADR-011; Spec V4.3.3 §8.4. ARFA 1.3 P5: one catch point,
+ * coded failures.
+ *
+ * @see https://github.com/KaririCode-PHP/exception/blob/main/README.md
  */
-class ConfigurationException extends \RuntimeException
+interface ConfigurationException extends ExceptionInterface
 {
-    // ── General ───────────────────────────────────────────────────────
-    private const int PATH_NOT_FOUND = 1000;
-    private const int TYPE_MISMATCH = 1001;
-    private const int IMMUTABLE_VIOLATION = 1002;
-    private const int UNSUPPORTED_FORMAT = 1003;
-    private const int UNDEFINED_ENV_VAR = 1004;
-    private const int TYPE_CAST_FAILED = 1005;
-    private const int DECRYPTION_FAILED = 1006;
-    private const int UNSUPPORTED_YAML_FEATURE = 1007;
-    private const int UNSUPPORTED_TOML_FEATURE = 1008;
-    private const int ENCRYPTION_FAILED = 1009;
-
-    public static function pathNotFound(string $path): self
-    {
-        return new self(
-            "Configuration path not found: '{$path}'.",
-            self::PATH_NOT_FOUND,
-        );
-    }
-
-    public static function typeMismatch(string $path, string $expected, string $actual): self
-    {
-        return new self(
-            "Type mismatch at '{$path}': expected {$expected}, got {$actual}.",
-            self::TYPE_MISMATCH,
-        );
-    }
-
-    public static function immutableViolation(): self
-    {
-        return new self(
-            'Configuration is immutable after loading completes.',
-            self::IMMUTABLE_VIOLATION,
-        );
-    }
-
-    public static function unsupportedFormat(string $extension): self
-    {
-        return new self(
-            "No loader registered for extension: '{$extension}'.",
-            self::UNSUPPORTED_FORMAT,
-        );
-    }
-
-    public static function undefinedEnvironmentVariable(string $name): self
-    {
-        return new self(
-            "Undefined environment variable: '{$name}'. "
-            . 'Provide a default value with ${' . $name . ':default} '
-            . 'or define the variable in your environment.',
-            self::UNDEFINED_ENV_VAR,
-        );
-    }
-
-    public static function typeCastFailed(string $type, string $value): self
-    {
-        return new self(
-            "Type cast to '{$type}' failed for value: '{$value}'.",
-            self::TYPE_CAST_FAILED,
-        );
-    }
-
-    public static function decryptionFailed(string $reason): self
-    {
-        return new self(
-            "Configuration value decryption failed: {$reason}.",
-            self::DECRYPTION_FAILED,
-        );
-    }
-
-    public static function encryptionFailed(string $reason): self
-    {
-        return new self(
-            "Configuration value encryption failed: {$reason}.",
-            self::ENCRYPTION_FAILED,
-        );
-    }
-
-    public static function unsupportedYamlFeature(string $feature, int $line): self
-    {
-        return new self(
-            "Unsupported YAML feature at line {$line}: {$feature}. "
-            . 'Use PHP format for advanced YAML features, or remove the unsupported syntax.',
-            self::UNSUPPORTED_YAML_FEATURE,
-        );
-    }
-
-    public static function unsupportedTomlFeature(string $feature, int $line): self
-    {
-        return new self(
-            "Unsupported TOML feature at line {$line}: {$feature}. "
-            . 'Use PHP format for advanced TOML features, or remove the unsupported syntax.',
-            self::UNSUPPORTED_TOML_FEATURE,
-        );
-    }
+    /** The ConfigCode case of the failure; `getCode()` is its integer. */
+    public ErrorCode $errorCode { get; }
 }

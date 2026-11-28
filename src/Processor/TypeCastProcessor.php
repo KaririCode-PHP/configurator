@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Processor;
 
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\ProcessorException;
 use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
@@ -108,14 +108,14 @@ final class TypeCastProcessor implements ValueProcessor
             'bool' => static fn(string $v): bool => match (strtolower($v)) {
                 'true', '1', 'yes', 'on' => true,
                 'false', '0', 'no', 'off', '' => false,
-                default => throw ConfigurationException::typeCastFailed('bool', $v),
+                default => throw ProcessorException::typeCastFailed('bool', 'not one of true, false, 1, 0, yes, no, on, off'),
             },
 
             'json' => static function (string $v): mixed {
                 try {
                     return json_decode($v, true, 512, JSON_THROW_ON_ERROR);
                 } catch (\JsonException $e) {
-                    throw ConfigurationException::typeCastFailed('json', $v);
+                    throw ProcessorException::typeCastFailed('json', $e->getMessage());
                 }
             },
 
@@ -127,7 +127,7 @@ final class TypeCastProcessor implements ValueProcessor
                 $decoded = base64_decode($v, true);
 
                 if ($decoded === false) {
-                    throw ConfigurationException::typeCastFailed('base64', 'invalid encoding');
+                    throw ProcessorException::typeCastFailed('base64', 'invalid encoding');
                 }
 
                 return $decoded;
@@ -135,7 +135,7 @@ final class TypeCastProcessor implements ValueProcessor
 
             'file' => static function (string $v): string {
                 if (!is_file($v) || !is_readable($v)) {
-                    throw ConfigurationException::typeCastFailed('file', "unreadable: {$v}");
+                    throw ProcessorException::typeCastFailed('file', "unreadable: {$v}");
                 }
 
                 $content = file_get_contents($v);

@@ -26,7 +26,7 @@ interface MergeStrategy
      *
      * @return array<array-key, mixed> Merged result
      *
-     * @throws MergeException When the strategy rejects the merge (code 1300);
+     * @throws MergeException When the strategy rejects the merge (CFG_2860);
      *                        the built-in strategies never do
      */
     public function merge(array $base, array $source): array;

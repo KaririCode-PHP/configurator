@@ -105,8 +105,8 @@ final class EncryptedValueProcessorTest extends TestCase
 
     public function testInvalidKeyLengthThrows(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('32 bytes');
+        $this->expectException(\KaririCode\Configurator\Exception\ProcessorException::class);
+        $this->expectExceptionCode(2840);
 
         new EncryptedValueProcessor('too_short');
     }

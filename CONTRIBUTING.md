@@ -50,6 +50,12 @@ in the QD-V433 record.
 5. The loaders parse what they read and never execute it, except
    `PhpLoader`, which includes the file it is given; which files a
    configuration loads is the caller's decision.
+6. Every exception extends a Configuration-family base of
+   `kariricode/exception`, implements `Exception\ConfigurationException` and
+   carries a code from block 2800–2899 (ADR-011); `src` throws no SPL
+   exception.
+7. No configuration value leaves the process in a message: an exception
+   names files, keys, lines and types, never a value, a payload or a key.
 
 ### Documentation
 

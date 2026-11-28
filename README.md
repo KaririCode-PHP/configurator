@@ -352,7 +352,7 @@ Local aliases (`KaririCode\Configurator\Contract\EnvironmentResolver`, etc.) ext
 
 ## Built-in Parsers
 
-All parsers fail loudly: unsupported features raise `ConfigurationException` (1007 YAML, 1008 TOML) and malformed files raise `LoaderException` 1102 naming the file. Full capability list and verification method: [SPEC §9](docs/spec/SPEC-CONFIGURATOR.md).
+All parsers fail loudly: unsupported features raise `LoaderException` (`CFG_2822` YAML, `CFG_2823` TOML) and malformed files raise `LoaderException` `CFG_2820` naming the file. Full capability list and verification method: [SPEC §9](docs/spec/SPEC-CONFIGURATOR.md).
 
 **YAML (subset of 1.2)** — block and flow collections, including lists of objects (`- host: a`), sequences at the parent key's indentation and multi-line flow collections; plain, single- and double-quoted scalars (with `\uXXXX` escapes); block scalars `|` / `>` with chomping (`-`, `+`) and indentation indicators; ints in four radixes (a leading zero is decimal, per YAML 1.2), `.inf`, `.nan`.
 
@@ -376,7 +376,7 @@ seal() pipeline:
   raw data → ValueProcessors → Validation → freeze
 ```
 
-After `seal()`, any call to `load()` or `merge()` throws `ConfigurationException`. The builder calls `seal()` automatically via `build()`.
+After `seal()`, any call to `load()` or `merge()` throws `AccessException` (`CFG_2801`). The builder calls `seal()` automatically via `build()`.
 
 ---
 
@@ -438,29 +438,29 @@ kariricode/configurator ^4.2
 
 ## Error Codes
 
-Rows marked *custom* are never raised by built-in components; they are the vocabulary for your own `Loader`, `ConfigValidator` and `MergeStrategy` implementations.
+Every exception implements `KaririCode\Configurator\Exception\ConfigurationException`, so one `catch` covers the package, and carries a code from block 2800–2899 (prefix `CFG`) of the ecosystem registry: the message starts with `[CFG_<code>]` and names files, keys and types, never configuration values. Rows marked *custom* are never raised by built-in components; they are the vocabulary for your own `Loader`, `ConfigValidator` and `MergeStrategy` implementations.
 
 | Code | Named constructor | Raised by |
 |---|---|---|
-| 1000 | `ConfigurationException::pathNotFound()` | *custom* — `get()` returns the default |
-| 1001 | `ConfigurationException::typeMismatch()` | typed getters |
-| 1002 | `ConfigurationException::immutableViolation()` | mutation after `seal()` |
-| 1003 | `ConfigurationException::unsupportedFormat()` | `load()` with an unknown extension |
-| 1004 | `ConfigurationException::undefinedEnvironmentVariable()` | strict `${VAR}` interpolation |
-| 1005 | `ConfigurationException::typeCastFailed()` | type-cast prefixes |
-| 1006 | `ConfigurationException::decryptionFailed()` | `ENC(...)` values |
-| 1007 | `ConfigurationException::unsupportedYamlFeature()` | YAML loader |
-| 1008 | `ConfigurationException::unsupportedTomlFeature()` | TOML loader |
-| 1009 | `ConfigurationException::encryptionFailed()` | `EncryptedValueProcessor::encrypt()` |
-| 1100 / 1101 | `LoaderException::fileNotFound()` / `fileUnreadable()` | all loaders |
-| 1102 | `LoaderException::parseError()` | JSON, YAML, TOML, INI loaders |
-| 1103 | `LoaderException::invalidReturnType()` | PHP and JSON loaders |
-| 1104 | `LoaderException::pathTraversal()` | *custom* loaders |
-| 1200 | `ValidationException::schemaViolations()` | `SchemaValidator` |
-| 1201 / 1202 | `ValidationException::requiredMissing()` / `typeConstraint()` | *custom* validators |
-| 1300 | `MergeException::conflict()` | *custom* merge strategies |
-
-Programmer errors (wrong argument types, an invalid encryption key) raise SPL `InvalidArgumentException`.
+| `CFG_2800` | `AccessException::typeMismatch()` | typed getters |
+| `CFG_2801` | `AccessException::immutableViolation()` | Configuration after seal() |
+| `CFG_2810` | `LoaderException::unsupportedFormat()` | Configuration::load() |
+| `CFG_2811` | `LoaderException::fileNotFound()` | all loaders |
+| `CFG_2812` | `LoaderException::fileUnreadable()` | all loaders |
+| `CFG_2813` | `LoaderException::pathTraversal()` | *custom* loaders that confine paths |
+| `CFG_2820` | `LoaderException::parseError()` | JSON, YAML, TOML and INI loaders |
+| `CFG_2821` | `LoaderException::invalidReturnType()` | PHP and JSON loaders |
+| `CFG_2822` | `LoaderException::unsupportedYamlFeature()` | YamlLoader |
+| `CFG_2823` | `LoaderException::unsupportedTomlFeature()` | TomlLoader |
+| `CFG_2830` | `ProcessorException::undefinedVariable()` | EnvironmentProcessor (strict mode) |
+| `CFG_2831` | `ProcessorException::typeCastFailed()` | TypeCastProcessor |
+| `CFG_2840` | `ProcessorException::invalidEncryptionKey()` | EncryptedValueProcessor |
+| `CFG_2841` | `ProcessorException::decryptionFailed()` | EncryptedValueProcessor |
+| `CFG_2842` | `ProcessorException::encryptionFailed()` | EncryptedValueProcessor::encrypt() |
+| `CFG_2850` | `ValidationException::schemaViolations()` | SchemaValidator |
+| `CFG_2851` | `ValidationException::requiredMissing()` | *custom* validators |
+| `CFG_2852` | `ValidationException::typeConstraint()` | *custom* validators |
+| `CFG_2860` | `MergeException::conflict()` | *custom* merge strategies |
 
 ---
 

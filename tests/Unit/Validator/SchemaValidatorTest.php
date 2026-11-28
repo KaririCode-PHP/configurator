@@ -34,7 +34,7 @@ final class SchemaValidatorTest extends TestCase
         ]);
 
         $this->expectException(ValidationException::class);
-        $this->expectExceptionCode(1200);
+        $this->expectExceptionCode(2850);
 
         $validator->validate([
             'app' => ['name' => 'TestApp'],
@@ -105,7 +105,7 @@ final class SchemaValidatorTest extends TestCase
             ]);
             self::fail('Expected ValidationException');
         } catch (ValidationException $e) {
-            $violations = $e->getViolations();
+            $violations = $e->violations;
             self::assertCount(3, $violations);
         }
     }

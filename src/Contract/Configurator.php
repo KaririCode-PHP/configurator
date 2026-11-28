@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Contract;
 
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\AccessException;
 
 /**
  * Central configuration access contract.
@@ -33,21 +33,21 @@ interface Configurator
     /**
      * Retrieves a string value, coercing scalars when safe.
      *
-     * @throws ConfigurationException When value cannot be represented as string
+     * @throws AccessException When value cannot be represented as string (CFG_2800)
      */
     public function getString(string $path, string $default = ''): string;
 
     /**
      * Retrieves an integer value with strict numeric parsing.
      *
-     * @throws ConfigurationException When value is not numeric
+     * @throws AccessException When value is not numeric (CFG_2800)
      */
     public function getInt(string $path, int $default = 0): int;
 
     /**
      * Retrieves a float value with strict numeric parsing.
      *
-     * @throws ConfigurationException When value is not numeric
+     * @throws AccessException When value is not numeric (CFG_2800)
      */
     public function getFloat(string $path, float $default = 0.0): float;
 
@@ -58,8 +58,8 @@ interface Configurator
      * Falsy:  false, 0, 'false', '0', 'no', 'off', ''
      * String matching is case-insensitive.
      *
-     * @throws ConfigurationException When the value is any other string, or not a
-     *                                bool, int, or string (code 1001)
+     * @throws AccessException When the value is any other string, or not a
+     *                         bool, int, or string (CFG_2800)
      */
     public function getBool(string $path, bool $default = false): bool;
 
@@ -70,7 +70,7 @@ interface Configurator
      *
      * @return array<array-key, mixed>
      *
-     * @throws ConfigurationException When value is not an array
+     * @throws AccessException When value is not an array (CFG_2800)
      */
     public function getArray(string $path, array $default = []): array;
 

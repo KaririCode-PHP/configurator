@@ -23,8 +23,8 @@ interface ConfigValidator
      *
      * @param array<array-key, mixed> $data Configuration data to validate
      *
-     * @throws ValidationException When one or more validation rules fail (code 1200;
-     *                             custom validators may also use 1201, 1202)
+     * @throws ValidationException When one or more validation rules fail (CFG_2850;
+     *                             custom validators may also use CFG_2851, CFG_2852)
      */
     public function validate(array $data): void;
 }

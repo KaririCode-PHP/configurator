@@ -31,7 +31,7 @@ final class PhpLoaderTest extends TestCase
     public function testThrowsForNonExistentFile(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1100);
+        $this->expectExceptionCode(2811);
 
         $this->loader->load('/nonexistent/path/config.php');
     }
@@ -39,7 +39,7 @@ final class PhpLoaderTest extends TestCase
     public function testThrowsForNonArrayReturn(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1103);
+        $this->expectExceptionCode(2821);
 
         $this->loader->load(dirname(__DIR__, 2) . '/Fixture/Invalid/invalid_return.php');
     }

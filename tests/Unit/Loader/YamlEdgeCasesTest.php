@@ -482,7 +482,7 @@ final class YamlEdgeCasesTest extends TestCase
     public function testOrphanIndentationIsRejected(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1102);
+        $this->expectExceptionCode(2820);
 
         $this->parseYaml("a: 1\n  b: 2\n");
     }
@@ -490,7 +490,7 @@ final class YamlEdgeCasesTest extends TestCase
     public function testMultiLineQuotedScalarIsUnsupported(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1007);
+        $this->expectExceptionCode(2822);
 
         $this->parseYaml("a: \"first\n  second\"\n");
     }
@@ -498,7 +498,7 @@ final class YamlEdgeCasesTest extends TestCase
     public function testUnsupportedFeatureKeepsItsErrorCode(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1007);
+        $this->expectExceptionCode(2822);
 
         $this->parseYaml("defaults: &d\n  t: 1\n");
     }

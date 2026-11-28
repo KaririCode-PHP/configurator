@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Processor;
 
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\ProcessorException;
 use KaririCode\Contract\Configuration\ValueProcessor;
 
 /**
@@ -44,7 +44,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      * @param string $key 32-byte raw key or 64-char hex-encoded key
      */
     /**
-     * @throws \InvalidArgumentException When the key is not 32 raw bytes or 64 hex characters
+     * @throws ProcessorException When the key is not 32 raw bytes or 64 hex characters
      */
     public function __construct(string $key)
     {
@@ -55,8 +55,8 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      * Normalizes a key to 32 raw bytes, accepting either a raw
      * 32-byte string or a 64-character hex-encoded string.
      *
-     * @throws \InvalidArgumentException When the key is neither 32 raw
-     *                                   bytes nor valid 64-char hex
+     * @throws ProcessorException When the key is neither 32 raw bytes nor
+     *                            valid 64-char hex
      */
     private static function resolveKey(string $key): string
     {
@@ -69,10 +69,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         }
 
         if (strlen($key) !== 32) {
-            throw new \InvalidArgumentException(
-                'Encryption key must be 32 bytes (256 bits). '
-                . 'Provide raw 32 bytes or 64 hex characters.',
-            );
+            throw ProcessorException::invalidEncryptionKey();
         }
 
         return $key;
@@ -102,7 +99,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         $raw = base64_decode($encoded, true);
 
         if ($raw === false) {
-            throw ConfigurationException::decryptionFailed('invalid base64 encoding');
+            throw ProcessorException::decryptionFailed('invalid base64 encoding');
         }
 
         // Minimum = nonce + tag. GCM ciphertext length equals plaintext
@@ -111,7 +108,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         $minLength = self::NONCE_LENGTH + self::TAG_LENGTH;
 
         if (strlen($raw) < $minLength) {
-            throw ConfigurationException::decryptionFailed('ciphertext too short');
+            throw ProcessorException::decryptionFailed('ciphertext too short');
         }
 
         $nonce = substr($raw, 0, self::NONCE_LENGTH);
@@ -128,7 +125,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         );
 
         if ($plaintext === false) {
-            throw ConfigurationException::decryptionFailed(
+            throw ProcessorException::decryptionFailed(
                 'decryption failed — invalid key, corrupted data, or tampered ciphertext',
             );
         }
@@ -145,8 +142,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
      * Not part of the loading pipeline — used by CLI tools and
      * deployment scripts.
      *
-     * @throws \InvalidArgumentException When the key is not 32 raw bytes or 64 hex characters
-     * @throws ConfigurationException    When OpenSSL fails to encrypt (code 1009)
+     * @throws ProcessorException When the key is not 32 raw bytes or 64 hex characters, or OpenSSL fails to encrypt
      */
     public static function encrypt(string $plaintext, string $key): string
     {
@@ -167,7 +163,7 @@ final readonly class EncryptedValueProcessor implements ValueProcessor
         );
 
         if ($ciphertext === false) {
-            throw ConfigurationException::encryptionFailed('OpenSSL could not encrypt the value');
+            throw ProcessorException::encryptionFailed('OpenSSL could not encrypt the value');
         }
 
         $payload = $nonce . $ciphertext . $tag;

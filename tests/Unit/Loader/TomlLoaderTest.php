@@ -242,7 +242,7 @@ final class TomlLoaderTest extends TestCase
     public function testRejectsInvalidDocument(string $toml): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1102);
+        $this->expectExceptionCode(2820);
 
         $this->load($toml);
     }
@@ -284,7 +284,7 @@ final class TomlLoaderTest extends TestCase
     public function testUnsupportedFeatureKeepsItsErrorCode(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1008);
+        $this->expectExceptionCode(2823);
 
         $this->load("[[products]]\nname = \"x\"\n");
     }

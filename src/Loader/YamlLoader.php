@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Loader;
 
 use KaririCode\Configurator\Contract\Loader;
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\ConfigCode;
 use KaririCode\Configurator\Exception\LoaderException;
 
 /**
@@ -26,13 +26,13 @@ use KaririCode\Configurator\Exception\LoaderException;
  * The structural phase then builds mappings and sequences from
  * indentation and rejects any line it cannot place.
  *
- * Unsupported features fail loudly with ConfigurationException (code
- * 1007) instead of being silently misparsed:
+ * Unsupported features fail loudly with LoaderException (code
+ * CFG_2822) instead of being silently misparsed:
  *   - Anchors (&name), aliases (*name), merge keys (<<:)
  *   - Type tags (!!str, !!binary, ...)
  *   - Tab indentation
  *   - Quoted scalars spanning several lines
- * Structurally invalid input fails with LoaderException (code 1102).
+ * Structurally invalid input fails with LoaderException (code CFG_2820).
  *
  * Zero external dependencies — no Symfony/Yaml required (ADR-002).
  *
@@ -86,8 +86,10 @@ final readonly class YamlLoader implements Loader
 
         try {
             return $this->parse($content);
-        } catch (\UnexpectedValueException $exception) {
-            throw LoaderException::parseError($path, $exception->getMessage());
+        } catch (LoaderException $exception) {
+            throw $exception->errorCode === ConfigCode::ParseError
+                ? LoaderException::parseError(path: $path, reason: $exception->reason, previous: $exception)
+                : $exception;
         }
     }
 
@@ -123,8 +125,8 @@ final readonly class YamlLoader implements Loader
      *
      * @return list<string>
      *
-     * @throws ConfigurationException    When an unsupported feature is found
-     * @throws \UnexpectedValueException When a flow collection is never closed
+     * @throws LoaderException    When an unsupported feature is found
+     * @throws LoaderException When a flow collection is never closed
      */
     private function normalizeLines(string $yaml): array
     {
@@ -165,7 +167,7 @@ final readonly class YamlLoader implements Loader
             }
 
             if ($this->hasUnterminatedQuote($line)) {
-                throw ConfigurationException::unsupportedYamlFeature(
+                throw LoaderException::unsupportedYamlFeature(
                     'quoted scalars spanning several lines are not supported — use a block scalar (| or >)',
                     $index + 1,
                 );
@@ -194,14 +196,14 @@ final readonly class YamlLoader implements Loader
     /**
      * Detects YAML features outside the configuration subset.
      *
-     * @throws ConfigurationException
+     * @throws LoaderException
      */
     private function detectUnsupportedFeatures(string $line, int $lineNumber): void
     {
         $feature = $this->unsupportedFeature($line);
 
         if ($feature !== null) {
-            throw ConfigurationException::unsupportedYamlFeature($feature, $lineNumber);
+            throw LoaderException::unsupportedYamlFeature($feature, $lineNumber);
         }
     }
 
@@ -420,16 +422,17 @@ final readonly class YamlLoader implements Loader
      *
      * @return array{0: string, 1: int} the joined line and the index of its last raw line
      *
-     * @throws \UnexpectedValueException When the collection is never closed
+     * @throws LoaderException When the collection is never closed
      */
     private function consumeFlowCollection(array $raw, int $index, string $line): array
     {
         $joined = $this->stripInlineComment($line);
         $count = count($raw);
+        $start = $index + 1;
 
         while ($this->flowDepth($joined) > 0) {
             if (++$index >= $count) {
-                throw new \UnexpectedValueException(sprintf("unterminated flow collection in '%s'", trim($line)));
+                throw LoaderException::invalidSyntax(sprintf('unterminated flow collection starting on line %d', $start));
             }
 
             $next = trim($raw[$index]);
@@ -467,13 +470,13 @@ final readonly class YamlLoader implements Loader
      *
      * @return array<array-key, mixed>
      *
-     * @throws \UnexpectedValueException When a line is indented less than the block
+     * @throws LoaderException When a line is indented less than the block
      */
     private function parseBlock(array $lines, int $indent): array
     {
         foreach ($lines as $line) {
             if ($this->indentLevel($line) < $indent) {
-                throw new \UnexpectedValueException(sprintf("bad indentation at '%s'", trim($line)));
+                throw LoaderException::invalidSyntax(sprintf('bad indentation at %s', $this->describe($line)));
             }
         }
 
@@ -487,7 +490,7 @@ final readonly class YamlLoader implements Loader
      *
      * @return array<array-key, mixed>
      *
-     * @throws \UnexpectedValueException When a line is not a key at this level
+     * @throws LoaderException When a line is not a key at this level
      */
     private function parseMapping(array $lines, int $start, int $end, int $indent): array
     {
@@ -500,7 +503,7 @@ final readonly class YamlLoader implements Loader
             $colon = $this->findKeyColon($stripped);
 
             if ($colon === false || $this->indentLevel($line) !== $indent || $this->isSequenceItem($stripped)) {
-                throw new \UnexpectedValueException(sprintf("expected 'key: value', got '%s'", $stripped));
+                throw LoaderException::invalidSyntax(sprintf("expected 'key: value' at indentation %d, got %s", $indent, $this->describe($stripped)));
             }
 
             $key = $this->parseKey(substr($stripped, 0, $colon));
@@ -558,7 +561,7 @@ final readonly class YamlLoader implements Loader
      *
      * @return list<string|int|float|bool|array<array-key, mixed>|null>
      *
-     * @throws \UnexpectedValueException When a line is not an item at this level
+     * @throws LoaderException When a line is not an item at this level
      */
     private function parseSequence(array $lines, int $start, int $end, int $indent): array
     {
@@ -569,7 +572,7 @@ final readonly class YamlLoader implements Loader
             $line = $lines[$index];
 
             if ($this->indentLevel($line) !== $indent || !$this->isSequenceItem(ltrim($line))) {
-                throw new \UnexpectedValueException(sprintf("expected a sequence item '- ', got '%s'", trim($line)));
+                throw LoaderException::invalidSyntax(sprintf("expected a sequence item '- ' at indentation %d, got %s", $indent, $this->describe($line)));
             }
 
             $itemEnd = $this->findBlockEnd($lines, $index + 1, $end, $indent + 1);
@@ -614,7 +617,7 @@ final readonly class YamlLoader implements Loader
      *
      * @return string|int|float|bool|array<array-key, mixed>|null
      *
-     * @throws \UnexpectedValueException When a flow or quoted value has continuation lines
+     * @throws LoaderException When a flow or quoted value has continuation lines
      */
     private function parseInlineValue(string $value, array $continuation = []): string|int|float|bool|array|null
     {
@@ -623,7 +626,7 @@ final readonly class YamlLoader implements Loader
 
         if ($first === '[' || $first === '{' || $first === '"' || $first === "'") {
             if ($continuation !== []) {
-                throw new \UnexpectedValueException(sprintf("unexpected '%s' after '%s'", trim($continuation[0]), $value));
+                throw LoaderException::invalidSyntax(sprintf('unexpected %s after a flow collection or a quoted scalar', $this->describe($continuation[0])));
             }
 
             return match ($first) {
@@ -641,7 +644,7 @@ final readonly class YamlLoader implements Loader
      *
      * @param list<string> $continuation
      *
-     * @throws \UnexpectedValueException When a continuation line is a key or a sequence item
+     * @throws LoaderException When a continuation line is a key or a sequence item
      */
     private function joinPlainScalar(string $value, array $continuation): string
     {
@@ -651,7 +654,7 @@ final readonly class YamlLoader implements Loader
             $part = $this->stripInlineComment(trim($line));
 
             if ($this->isSequenceItem($part) || $this->findKeyColon($part) !== false) {
-                throw new \UnexpectedValueException(sprintf("unexpected '%s' inside a multi-line plain scalar", $part));
+                throw LoaderException::invalidSyntax(sprintf('unexpected %s inside a multi-line plain scalar', $this->describe($part)));
             }
 
             $parts[] = $part;
@@ -753,7 +756,7 @@ final readonly class YamlLoader implements Loader
      * Decodes the escape sequences of a double-quoted scalar
      * (YAML 1.2, section 5.7), including \xHH, \uHHHH and \UHHHHHHHH.
      *
-     * @throws \UnexpectedValueException On an unknown or truncated escape
+     * @throws LoaderException On an unknown or truncated escape
      */
     private function unescapeDoubleQuoted(string $value): string
     {
@@ -779,13 +782,13 @@ final readonly class YamlLoader implements Loader
                 'x' => 2,
                 'u' => 4,
                 'U' => 8,
-                default => throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s'", $escape)),
+                default => throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s'", $escape)),
             };
 
             $hex = substr($value, $i + 1, $width);
 
             if (preg_match('/^[0-9a-fA-F]{' . $width . '}$/', $hex) !== 1) {
-                throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s%s'", $escape, $hex));
+                throw LoaderException::invalidSyntax(sprintf("invalid escape sequence '\\%s': expected %d hexadecimal digits", $escape, $width));
             }
 
             $result .= $this->encodeCodePoint((int) hexdec($hex));
@@ -834,7 +837,7 @@ final readonly class YamlLoader implements Loader
     }
 
     /**
-     * @throws \UnexpectedValueException When text follows the closing bracket
+     * @throws LoaderException When text follows the closing bracket
      */
     private function assertFlowClosesAtEnd(string $value): void
     {
@@ -850,12 +853,12 @@ final readonly class YamlLoader implements Loader
             };
 
             if ($depth === 0 && $i < $last) {
-                throw new \UnexpectedValueException(sprintf("unexpected text after flow collection in '%s'", $value));
+                throw LoaderException::invalidSyntax('unexpected text after a flow collection');
             }
         }
 
         if ($depth !== 0) {
-            throw new \UnexpectedValueException(sprintf("unbalanced flow collection '%s'", $value));
+            throw LoaderException::invalidSyntax('unbalanced flow collection');
         }
     }
 
@@ -895,6 +898,22 @@ final readonly class YamlLoader implements Loader
     }
 
     // ── Utility ───────────────────────────────────────────────────────
+
+    /**
+     * Names a line for an error message without repeating its value: the
+     * key of a "key:" line, or the kind of line it is.
+     */
+    private function describe(string $line): string
+    {
+        $stripped = ltrim($line);
+        $colon = $this->findKeyColon($stripped);
+
+        return match (true) {
+            $this->isSequenceItem($stripped) => 'a sequence item',
+            $colon !== false => sprintf("the key '%s'", $this->parseKey(substr($stripped, 0, $colon))),
+            default => 'a line that is neither a key nor a sequence item',
+        };
+    }
 
     /**
      * Replaces every quoted span (delimiters included) with MASK bytes,

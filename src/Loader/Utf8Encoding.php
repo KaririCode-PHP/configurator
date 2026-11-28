@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Loader;
 
+use KaririCode\Configurator\Exception\LoaderException;
+
 /**
  * Encodes a Unicode scalar value as UTF-8 for the escape sequences of
  * the built-in YAML and TOML parsers, without ext-mbstring or ext-intl.
@@ -20,12 +22,12 @@ namespace KaririCode\Configurator\Loader;
 trait Utf8Encoding
 {
     /**
-     * @throws \UnexpectedValueException When $codePoint is not a Unicode scalar value
+     * @throws LoaderException When $codePoint is not a Unicode scalar value
      */
     private function encodeCodePoint(int $codePoint): string
     {
         if ($codePoint < 0 || $codePoint > 0x10FFFF || ($codePoint >= 0xD800 && $codePoint <= 0xDFFF)) {
-            throw new \UnexpectedValueException(sprintf('invalid Unicode scalar value U+%04X', $codePoint));
+            throw LoaderException::invalidSyntax(sprintf('invalid Unicode scalar value U+%04X', $codePoint));
         }
 
         if ($codePoint < 0x80) {

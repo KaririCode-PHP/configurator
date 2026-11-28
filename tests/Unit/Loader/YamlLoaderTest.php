@@ -33,7 +33,7 @@ final class YamlLoaderTest extends TestCase
     public function testThrowsForNonExistentFile(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1100);
+        $this->expectExceptionCode(2811);
 
         $this->loader->load('/nonexistent/file.yaml');
     }

@@ -31,7 +31,7 @@ final class JsonLoaderTest extends TestCase
     public function testThrowsForNonExistentFile(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1100);
+        $this->expectExceptionCode(2811);
 
         $this->loader->load('/nonexistent/file.json');
     }
@@ -39,7 +39,7 @@ final class JsonLoaderTest extends TestCase
     public function testThrowsForInvalidJson(): void
     {
         $this->expectException(LoaderException::class);
-        $this->expectExceptionCode(1102);
+        $this->expectExceptionCode(2820);
 
         $this->loader->load(dirname(__DIR__, 2) . '/Fixture/Invalid/invalid.json');
     }

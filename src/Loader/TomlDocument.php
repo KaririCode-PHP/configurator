@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Loader;
 
+use KaririCode\Configurator\Exception\LoaderException;
+
 /**
  * The tables and keys of one TOML document, or of one inline table,
  * built under the definition rules of TOML 1.0: a key is defined once,
@@ -28,7 +30,7 @@ final class TomlDocument
      *
      * @param non-empty-list<string> $table
      *
-     * @throws \UnexpectedValueException When the table is already defined or a parent is a value
+     * @throws LoaderException When the table is already defined or a parent is a value
      */
     public function declareTable(array $table): void
     {
@@ -42,12 +44,12 @@ final class TomlDocument
 
             if ($depth === $last) {
                 if ($origin !== null && $origin !== TomlDefinition::ImplicitTable) {
-                    throw new \UnexpectedValueException(sprintf("table '%s' is already defined", implode('.', $table)));
+                    throw LoaderException::invalidSyntax(sprintf("table '%s' is already defined", implode('.', $table)));
                 }
 
                 $this->defined[$id] = TomlDefinition::HeaderTable;
             } elseif ($origin === TomlDefinition::Value) {
-                throw new \UnexpectedValueException(sprintf("key '%s' is not a table", $segment));
+                throw LoaderException::invalidSyntax(sprintf("key '%s' is not a table", $segment));
             } else {
                 $this->defined[$id] = $origin ?? TomlDefinition::ImplicitTable;
             }
@@ -71,7 +73,7 @@ final class TomlDocument
      * @param non-empty-list<string>                         $key
      * @param string|int|float|bool|array<array-key, mixed> $value
      *
-     * @throws \UnexpectedValueException When a definition rule is violated
+     * @throws LoaderException When a definition rule is violated
      */
     public function assign(array $table, array $key, string|int|float|bool|array $value): void
     {
@@ -93,7 +95,7 @@ final class TomlDocument
         $id = $this->pathId([...$path, $leaf]);
 
         if (isset($this->defined[$id])) {
-            throw new \UnexpectedValueException(sprintf("duplicate key '%s'", implode('.', [...$path, $leaf])));
+            throw LoaderException::invalidSyntax(sprintf("duplicate key '%s'", implode('.', [...$path, $leaf])));
         }
 
         $this->defined[$id] = TomlDefinition::Value;
@@ -109,7 +111,7 @@ final class TomlDocument
      *
      * @param list<string> $prefix
      *
-     * @throws \UnexpectedValueException When the prefix is a value, or a dotted key reopens a declared table
+     * @throws LoaderException When the prefix is a value, or a dotted key reopens a declared table
      */
     private function claimParent(array $prefix, string $segment, bool $dotted): void
     {
@@ -117,7 +119,7 @@ final class TomlDocument
         $origin = $this->defined[$id] ?? null;
 
         if ($origin === TomlDefinition::Value) {
-            throw new \UnexpectedValueException(sprintf("key '%s' is not a table", $segment));
+            throw LoaderException::invalidSyntax(sprintf("key '%s' is not a table", $segment));
         }
 
         if (!$dotted) {
@@ -125,7 +127,7 @@ final class TomlDocument
         }
 
         if ($origin === TomlDefinition::HeaderTable || $origin === TomlDefinition::ImplicitTable) {
-            throw new \UnexpectedValueException(sprintf("table '%s' is already defined", $segment));
+            throw LoaderException::invalidSyntax(sprintf("table '%s' is already defined", $segment));
         }
 
         $this->defined[$id] = TomlDefinition::DottedTable;

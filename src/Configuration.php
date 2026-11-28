@@ -8,7 +8,7 @@ use KaririCode\Configurator\Contract\ConfigValidator;
 use KaririCode\Configurator\Contract\Configurator;
 use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Contract\MergeStrategy;
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\AccessException;
 use KaririCode\Configurator\Exception\LoaderException;
 use KaririCode\Configurator\Loader\IniLoader;
 use KaririCode\Configurator\Loader\JsonLoader;
@@ -27,7 +27,7 @@ use KaririCode\Configurator\Processor\ValueProcessorChain;
  * optionally validates against a schema, and exposes values through
  * type-safe dot-notation accessors. After the loading phase, the
  * internal state is sealed and any mutation attempt raises
- * ConfigurationException.
+ * AccessException.
  *
  * PHP 8.4 features used:
  *   - Property hooks for computed properties (count, isEmpty, keys)
@@ -81,8 +81,8 @@ final class Configuration implements Configurator
      * Loads a configuration file, merging its contents into the
      * accumulated state. Must be called before seal().
      *
-     * @throws ConfigurationException When configuration is already sealed
-     * @throws LoaderException        When no loader supports the file extension
+     * @throws AccessException When configuration is already sealed
+     * @throws LoaderException When no loader supports the file extension, or the file cannot be loaded
      */
     public function load(string $path): self
     {
@@ -105,7 +105,7 @@ final class Configuration implements Configurator
      *
      * @param array<array-key, mixed> $data
      *
-     * @throws ConfigurationException When the configuration is sealed (code 1002)
+     * @throws AccessException When the configuration is sealed (CFG_2801)
      */
     public function merge(array $data): self
     {
@@ -161,7 +161,7 @@ final class Configuration implements Configurator
             return (string) $value;
         }
 
-        throw ConfigurationException::typeMismatch($path, 'string', get_debug_type($value));
+        throw AccessException::typeMismatch($path, 'string', get_debug_type($value));
     }
 
     #[\Override]
@@ -182,7 +182,7 @@ final class Configuration implements Configurator
             return (int) $value;
         }
 
-        throw ConfigurationException::typeMismatch($path, 'int', get_debug_type($value));
+        throw AccessException::typeMismatch($path, 'int', get_debug_type($value));
     }
 
     #[\Override]
@@ -203,7 +203,7 @@ final class Configuration implements Configurator
             return (float) $value;
         }
 
-        throw ConfigurationException::typeMismatch($path, 'float', get_debug_type($value));
+        throw AccessException::typeMismatch($path, 'float', get_debug_type($value));
     }
 
     #[\Override]
@@ -224,7 +224,7 @@ final class Configuration implements Configurator
             return match (strtolower($value)) {
                 'true', '1', 'yes', 'on' => true,
                 'false', '0', 'no', 'off', '' => false,
-                default => throw ConfigurationException::typeMismatch($path, 'bool', "string('{$value}')"),
+                default => throw AccessException::typeMismatch($path, 'bool', 'a string outside true, false, 1, 0, yes, no, on, off'),
             };
         }
 
@@ -232,7 +232,7 @@ final class Configuration implements Configurator
             return $value !== 0;
         }
 
-        throw ConfigurationException::typeMismatch($path, 'bool', get_debug_type($value));
+        throw AccessException::typeMismatch($path, 'bool', get_debug_type($value));
     }
 
     /**
@@ -254,7 +254,7 @@ final class Configuration implements Configurator
             return $value;
         }
 
-        throw ConfigurationException::typeMismatch($path, 'array', get_debug_type($value));
+        throw AccessException::typeMismatch($path, 'array', get_debug_type($value));
     }
 
     #[\Override]
@@ -317,13 +317,13 @@ final class Configuration implements Configurator
     private function resolveLoader(string $extension): Loader
     {
         return $this->loaders[$extension]
-            ?? throw ConfigurationException::unsupportedFormat($extension);
+            ?? throw LoaderException::unsupportedFormat($extension);
     }
 
     private function guardMutable(): void
     {
         if ($this->sealed) {
-            throw ConfigurationException::immutableViolation();
+            throw AccessException::immutableViolation();
         }
     }
 

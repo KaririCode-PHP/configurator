@@ -5,6 +5,14 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Tests\Conformance;
 
 use JsonException;
+use KaririCode\Configurator\Exception\ConfigCode;
+use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Contract\Exception\Configuration;
+use KaririCode\Contract\Exception\ContainerFailure;
+use KaririCode\Contract\Exception\NotFound;
+use KaririCode\Contract\Exception\Protocol;
+use KaririCode\Contract\Exception\Runtime;
+use KaririCode\Contract\Exception\Validation;
 use PhpToken;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
@@ -21,6 +29,15 @@ final class ArfaConformanceTest extends TestCase
     private const string ROOT = __DIR__ . '/../..';
 
     private const string SOURCE_NAMESPACE = 'KaririCode\\Configurator\\';
+
+    private const int ERROR_CODE_MIN = 2800;
+
+    private const int ERROR_CODE_MAX = 2899;
+
+    private const array FAMILIES = [Validation::class, NotFound::class, Configuration::class, Protocol::class, ContainerFailure::class, Runtime::class];
+
+    /** The concrete exceptions of the package, each built by named constructors only. */
+    private const array EXCEPTIONS = ['AccessException', 'LoaderException', 'MergeException', 'ProcessorException', 'ValidationException'];
 
     /** The eight gates of Spec V4.3.3 §29.1. */
     private const array QUALITY_GATES = ['test', 'test-conformance', 'phpstan', 'psalm', 'cs-check', 'complexity', 'mutation', 'security'];
@@ -41,6 +58,20 @@ final class ArfaConformanceTest extends TestCase
     }
 
     // ── Types ────────────────────────────────────────────────────────────
+
+    #[Test]
+    public function concreteClassesAreFinal(): void
+    {
+        foreach (self::sourceFiles() as $relative => $code) {
+            $type = self::reflect($relative);
+
+            if ($type->isInterface() || $type->isEnum() || $type->isTrait() || $type->isAbstract()) {
+                continue;
+            }
+
+            self::assertTrue($type->isFinal(), $relative);
+        }
+    }
 
     #[Test]
     public function valuesAreFinalReadonly(): void
@@ -151,22 +182,27 @@ final class ArfaConformanceTest extends TestCase
         self::assertSame(4, $checked);
     }
 
-    /** ARFA 1.3 E-003: no enum of the package needs a backing value. */
+    /** ARFA 1.3 E-003: only the code table is backed, because getCode() reads its integer. */
     #[Test]
-    public function enumsArePure(): void
+    public function enumsArePureUnlessAnExternalContractNeedsABackingType(): void
     {
         $checked = 0;
 
         foreach (self::sourceFiles() as $relative => $code) {
             $name = self::reflect($relative)->getName();
 
-            if (enum_exists($name) && !str_starts_with($relative, 'Exception/')) {
+            if (enum_exists($name)) {
                 ++$checked;
-                self::assertFalse((new \ReflectionEnum($name))->isBacked(), $relative . ': E-003');
+                $backed = $relative === 'Exception/ConfigCode.php';
+                self::assertSame($backed, (new \ReflectionEnum($name))->isBacked(), $relative . ': E-003');
+
+                if ($backed) {
+                    self::assertStringContainsString('E-003', $code, $relative . ': the justification is written down');
+                }
             }
         }
 
-        self::assertSame(1, $checked);
+        self::assertSame(2, $checked);
     }
 
     #[Test]
@@ -184,6 +220,64 @@ final class ArfaConformanceTest extends TestCase
                 }
             }
         }
+    }
+
+    // ── Errors ───────────────────────────────────────────────────────────
+
+    #[Test]
+    public function errorCodesAreUniqueAndInsideTheReservedBlock(): void
+    {
+        $codes = [];
+
+        foreach (ConfigCode::cases() as $case) {
+            self::assertGreaterThanOrEqual(self::ERROR_CODE_MIN, $case->value);
+            self::assertLessThanOrEqual(self::ERROR_CODE_MAX, $case->value);
+            $codes[$case->value] = $case->name;
+        }
+
+        self::assertCount(19, $codes);
+        self::assertSame('CFG', ConfigCode::prefix());
+        self::assertSame([self::ERROR_CODE_MIN, self::ERROR_CODE_MAX], [ConfigCode::block()->first, ConfigCode::block()->last]);
+    }
+
+    #[Test]
+    public function exceptionsAreBuiltOnlyByTheirNamedConstructors(): void
+    {
+        foreach (self::sourceFiles() as $relative => $code) {
+            foreach (self::EXCEPTIONS as $exception) {
+                if ($relative === 'Exception/' . $exception . '.php') {
+                    continue;
+                }
+
+                self::assertDoesNotMatchRegularExpression('/\bnew\s+' . $exception . '\s*\(/', $code, $relative . ' builds ' . $exception . ' directly');
+            }
+
+            self::assertDoesNotMatchRegularExpression('/\bthrow\s+new\s+\\?[A-Za-z]*(Exception|Error)\b/', $code, $relative . ': throws an uncoded exception');
+        }
+    }
+
+    #[Test]
+    public function everyConcreteExceptionBelongsToExactlyOneContractFamilyAndThePackage(): void
+    {
+        $checked = 0;
+
+        foreach (self::sourceFiles() as $relative => $code) {
+            $type = self::reflect($relative);
+
+            if (!str_starts_with($relative, 'Exception/') || $type->isAbstract() || $type->isEnum() || $type->isInterface()) {
+                continue;
+            }
+
+            ++$checked;
+            $families = array_filter(self::FAMILIES, static fn(string $family): bool => $type->implementsInterface($family));
+            self::assertCount(1, $families, $relative);
+            self::assertTrue($type->implementsInterface(ConfigurationException::class), $relative);
+            $parent = $type->getParentClass();
+            self::assertNotFalse($parent, $relative);
+            self::assertStringStartsWith('KaririCode\\Exception\\', $parent->getName(), $relative . ': built on a kariricode/exception base');
+        }
+
+        self::assertSame(count(self::EXCEPTIONS), $checked);
     }
 
     // ── Package metadata and supply chain ────────────────────────────────

@@ -168,8 +168,8 @@ Complexity: O(d) where d = dot-depth of the path.
 
 The YAML, TOML and INI parsers have no third-party dependency (ADR-002,
 ADR-008) and fail loudly: unsupported features raise
-ConfigurationException (1007 YAML, 1008 TOML); malformed documents raise
-LoaderException 1102 naming the file (and, for TOML, the line).
+LoaderException (CFG_2822 YAML, CFG_2823 TOML); malformed documents raise
+LoaderException CFG_2820 naming the file (and, for TOML, the line).
 
 ### 9.1 YAML (subset of YAML 1.2)
 
@@ -201,7 +201,7 @@ Behaviour change in 4.2: `|` and `>` blocks end with one line break (clip
 chomping, as YAML 1.2 specifies and PyYAML does). Earlier versions
 dropped it; `|-` / `>-` give the previous result.
 
-Unsupported (ConfigurationException 1007): anchors and aliases, merge
+Unsupported (LoaderException CFG_2822): anchors and aliases, merge
 keys (checked before aliases), type tags (`!!str`), tab indentation,
 quoted scalars spanning several lines.
 
@@ -222,14 +222,14 @@ only between digits) checked for 64-bit overflow; floats including
 `inf` / `nan`; booleans; arrays (nested, multi-line, trailing comma);
 single-line inline tables.
 
-Rejected with LoaderException 1102 and the line number: unquoted
+Rejected with LoaderException CFG_2820 and the line number: unquoted
 strings, malformed numbers, invalid escapes and surrogate code points,
 empty bare key segments, duplicate keys or tables, keys that extend a
 value, a header that redeclares a table created by dotted keys (and
 dotted keys that reopen a header-declared table), trailing comma in an
 inline table.
 
-Unsupported (ConfigurationException 1008): arrays of tables `[[t]]`,
+Unsupported (LoaderException CFG_2823): arrays of tables `[[t]]`,
 multi-line strings, date/time values (quote them as strings).
 
 Verification: differential test of the PHP loader against Python's
@@ -240,7 +240,7 @@ tomllib on 33 documents (17 identical parses, 16 required rejections).
 Delegates to `parse_ini_string()` with sections and `INI_SCANNER_TYPED`
 (booleans, null, integers and floats are typed). Dotted keys and dotted
 section names expand into nested arrays. Parse warnings become
-LoaderException 1102 through a scoped error handler (no `@`).
+LoaderException CFG_2820 through a scoped error handler (no `@`).
 
 ## 10. Hot Reload
 
@@ -310,33 +310,35 @@ kariricode/configurator ^4.2
 
 ## 13. Error Codes
 
-Every exception is created by a static named constructor with a fixed
-code. Rows marked *custom* are never raised by built-in components: they
+Every exception implements the marker `Exception\ConfigurationException`,
+extends the kariricode/exception base of the Configuration family, and is
+created by a static named constructor with a code from block 2800–2899
+under the prefix CFG (ADR-011): the message starts with `[CFG_<code>]`,
+`getCode()` returns the integer and `$errorCode` the ConfigCode case.
+Messages name files, keys, variables and types, never configuration
+values. Rows marked *custom* are never raised by built-in components: they
 are the vocabulary for user implementations of the extension contracts
-(Loader, ConfigValidator, MergeStrategy) and for application code.
+(Loader, ConfigValidator, MergeStrategy).
 
-| Code | Named constructor                                        | Raised by                             |
-|------|----------------------------------------------------------|---------------------------------------|
-| 1000 | ConfigurationException::pathNotFound()                   | *custom* — get() returns the default  |
-| 1001 | ConfigurationException::typeMismatch()                   | Configuration typed getters           |
-| 1002 | ConfigurationException::immutableViolation()             | Configuration after seal()            |
-| 1003 | ConfigurationException::unsupportedFormat()              | Configuration::load()                 |
-| 1004 | ConfigurationException::undefinedEnvironmentVariable()   | EnvironmentProcessor (strict mode)    |
-| 1005 | ConfigurationException::typeCastFailed()                 | TypeCastProcessor                     |
-| 1006 | ConfigurationException::decryptionFailed()               | EncryptedValueProcessor               |
-| 1007 | ConfigurationException::unsupportedYamlFeature()         | YamlLoader                            |
-| 1008 | ConfigurationException::unsupportedTomlFeature()         | TomlLoader                            |
-| 1009 | ConfigurationException::encryptionFailed()               | EncryptedValueProcessor::encrypt()    |
-| 1100 | LoaderException::fileNotFound()                          | all loaders                           |
-| 1101 | LoaderException::fileUnreadable()                        | all loaders                           |
-| 1102 | LoaderException::parseError()                            | JSON, YAML, TOML and INI loaders      |
-| 1103 | LoaderException::invalidReturnType()                     | PHP and JSON loaders                  |
-| 1104 | LoaderException::pathTraversal()                         | *custom* loaders that confine paths   |
-| 1200 | ValidationException::schemaViolations()                  | SchemaValidator                       |
-| 1201 | ValidationException::requiredMissing()                   | *custom* validators                   |
-| 1202 | ValidationException::typeConstraint()                    | *custom* validators                   |
-| 1300 | MergeException::conflict()                               | *custom* merge strategies             |
-
-Programmer errors — an encryption key that is not 32 raw bytes / 64 hex
-characters — raise SPL `InvalidArgumentException` without a code.
+| Code     | Named constructor                            | Raised by                           |
+|----------|----------------------------------------------|-------------------------------------|
+| CFG_2800 | AccessException::typeMismatch()              | Configuration typed getters         |
+| CFG_2801 | AccessException::immutableViolation()        | Configuration after seal()          |
+| CFG_2810 | LoaderException::unsupportedFormat()         | Configuration::load()               |
+| CFG_2811 | LoaderException::fileNotFound()              | all loaders                         |
+| CFG_2812 | LoaderException::fileUnreadable()            | all loaders                         |
+| CFG_2813 | LoaderException::pathTraversal()             | *custom* loaders that confine paths |
+| CFG_2820 | LoaderException::parseError()                | JSON, YAML, TOML and INI loaders    |
+| CFG_2821 | LoaderException::invalidReturnType()         | PHP and JSON loaders                |
+| CFG_2822 | LoaderException::unsupportedYamlFeature()    | YamlLoader                          |
+| CFG_2823 | LoaderException::unsupportedTomlFeature()    | TomlLoader                          |
+| CFG_2830 | ProcessorException::undefinedVariable()      | EnvironmentProcessor (strict mode)  |
+| CFG_2831 | ProcessorException::typeCastFailed()         | TypeCastProcessor                   |
+| CFG_2840 | ProcessorException::invalidEncryptionKey()   | EncryptedValueProcessor             |
+| CFG_2841 | ProcessorException::decryptionFailed()       | EncryptedValueProcessor             |
+| CFG_2842 | ProcessorException::encryptionFailed()       | EncryptedValueProcessor::encrypt()  |
+| CFG_2850 | ValidationException::schemaViolations()      | SchemaValidator                     |
+| CFG_2851 | ValidationException::requiredMissing()       | *custom* validators                 |
+| CFG_2852 | ValidationException::typeConstraint()        | *custom* validators                 |
+| CFG_2860 | MergeException::conflict()                   | *custom* merge strategies           |
 

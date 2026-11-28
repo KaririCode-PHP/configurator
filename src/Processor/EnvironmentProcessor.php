@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace KaririCode\Configurator\Processor;
 
 use KaririCode\Configurator\Environment\SystemEnvironmentResolver;
-use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\ProcessorException;
 use KaririCode\Contract\Configuration\ValueProcessor;
 use KaririCode\Contract\Environment\EnvironmentResolver;
 
@@ -20,7 +20,7 @@ use KaririCode\Contract\Environment\EnvironmentResolver;
  * Supports recursive interpolation: ${DB_HOST:${FALLBACK_HOST:localhost}}
  *
  * When strict mode is enabled (default), referencing an undefined
- * variable without a default value raises ConfigurationException.
+ * variable without a default value raises ProcessorException.
  * This prevents silent misconfiguration in production deployments.
  *
  * The resolver can be any EnvironmentResolver implementation:
@@ -163,7 +163,7 @@ final readonly class EnvironmentProcessor implements ValueProcessor
         }
 
         if ($this->strict) {
-            throw ConfigurationException::undefinedEnvironmentVariable($name);
+            throw ProcessorException::undefinedVariable($name);
         }
 
         return '';

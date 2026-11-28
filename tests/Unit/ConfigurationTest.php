@@ -107,7 +107,7 @@ final class ConfigurationTest extends TestCase
         $config->seal();
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1002);
+        $this->expectExceptionCode(2801);
         $config->load($this->fixturesPath . '/services.json');
     }
 
@@ -117,7 +117,7 @@ final class ConfigurationTest extends TestCase
         $config->seal();
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1002);
+        $this->expectExceptionCode(2801);
         $config->merge(['key' => 'value']);
     }
 
@@ -318,7 +318,7 @@ final class ConfigurationTest extends TestCase
         $config = new Configuration();
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionCode(1003);
+        $this->expectExceptionCode(2810);
         $config->load('/some/file.xml');
     }
 

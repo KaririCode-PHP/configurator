@@ -34,7 +34,8 @@
     },
     "require": {
         "php": "^8.4",
-        "kariricode/contract": "^2.11"
+        "kariricode/contract": "^2.11",
+        "kariricode/exception": "^2.0.2"
     },
     "require-dev": {
         "psr/container": "^2.0",
