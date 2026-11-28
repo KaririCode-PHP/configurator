@@ -1,0 +1,50 @@
+# Logging configuration
+logging:
+  level: info
+  channels:
+    file:
+      path: /var/log/app.log
+      max_files: 14
+    stdout:
+      enabled: true
+  format: json
+
+# Security settings
+security:
+  cors:
+    allowed_origins:
+      - "https://example.com"
+      - "https://api.example.com"
+    max_age: 3600
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+
+# Multi-line description
+description: |
+  This is a multi-line
+  configuration value
+  preserved with newlines
+
+# Folded scalar
+summary: >
+  This text will be
+  folded into a single
+  line with spaces
+
+# Type casting
+types:
+  null_value: ~
+  bool_true: true
+  bool_false: false
+  integer: 42
+  negative: -17
+  float_val: 3.14
+  hex: 0xFF
+  scientific: 1.5e10
+  infinity: .inf
+  quoted: "not a bool: true"
+
+# Flow collections
+flow_seq: [alpha, beta, gamma]
+flow_map: {name: test, version: 1}

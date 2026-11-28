@@ -1,0 +1,88 @@
+<?php
+
+declare(strict_types=1);
+
+namespace KaririCode\Configurator\Contract;
+
+use KaririCode\Configurator\Exception\ConfigurationException;
+
+/**
+ * Central configuration access contract.
+ *
+ * Provides unified, type-safe access to hierarchical configuration
+ * data with dot-notation path resolution. Implementations must
+ * guarantee immutability after the loading phase completes.
+ *
+ * Dot-notation resolves nested keys:
+ *   'database.connections.default.host' → $data['database']['connections']['default']['host']
+ *
+ * @package KaririCode\Configurator
+ * @since   4.0.0 ARFA 1.3
+ */
+interface Configurator
+{
+    /**
+     * Retrieves a configuration value by dot-notation path.
+     *
+     * Never throws: returns $default when the path does not exist, is
+     * malformed (empty segments), or holds null. A stored null is
+     * indistinguishable from a missing key (see has()).
+     */
+    public function get(string $path, mixed $default = null): mixed;
+
+    /**
+     * Retrieves a string value, coercing scalars when safe.
+     *
+     * @throws ConfigurationException When value cannot be represented as string
+     */
+    public function getString(string $path, string $default = ''): string;
+
+    /**
+     * Retrieves an integer value with strict numeric parsing.
+     *
+     * @throws ConfigurationException When value is not numeric
+     */
+    public function getInt(string $path, int $default = 0): int;
+
+    /**
+     * Retrieves a float value with strict numeric parsing.
+     *
+     * @throws ConfigurationException When value is not numeric
+     */
+    public function getFloat(string $path, float $default = 0.0): float;
+
+    /**
+     * Retrieves a boolean value.
+     *
+     * Truthy: true, any non-zero int, 'true', '1', 'yes', 'on'
+     * Falsy:  false, 0, 'false', '0', 'no', 'off', ''
+     * String matching is case-insensitive.
+     *
+     * @throws ConfigurationException When the value is any other string, or not a
+     *                                bool, int, or string (code 1001)
+     */
+    public function getBool(string $path, bool $default = false): bool;
+
+    /**
+     * Retrieves an array value.
+     *
+     * @param array<array-key, mixed> $default
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws ConfigurationException When value is not an array
+     */
+    public function getArray(string $path, array $default = []): array;
+
+    /**
+     * Returns false both for a missing path and for a path holding null.
+     */
+    public function has(string $path): bool;
+
+    /**
+     * Returns all configuration data as a nested array.
+     *
+     * @return array<array-key, mixed>
+     */
+    public function all(): array;
+}

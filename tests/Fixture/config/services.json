@@ -1,0 +1,15 @@
+{
+    "services": {
+        "mailer": {
+            "transport": "smtp",
+            "host": "mail.example.com",
+            "port": 587,
+            "encryption": "tls"
+        },
+        "queue": {
+            "driver": "redis",
+            "connection": "default"
+        }
+    },
+    "features": ["notifications", "webhooks", "api-keys"]
+}

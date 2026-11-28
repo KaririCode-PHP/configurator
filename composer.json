@@ -1,72 +1,70 @@
 {
-  "name": "kariricode/configurator",
-  "description": "A flexible and efficient configuration management component for the KaririCode Framework, providing robust configuration handling for PHP applications.",
-  "keywords": [
-    "Configuration",
-    "Config",
-    "php",
-    "KaririCode",
-    "framework",
-    "Configurator",
-    "Config Loader",
-    "Config Parser",
-    "Config Storage",
-    "Environment Configuration",
-    "Multi-environment Config",
-    "Config Caching",
-    "Config Merging",
-    "Application Settings",
-    "System Configuration"
-  ],
-  "homepage": "https://kariricode.org/",
-  "type": "library",
-  "license": "MIT",
-  "authors": [
-    {
-      "name": "Walmir Silva",
-      "email": "walmir.silva@kariricode.org"
-    }
-  ],
-  "autoload": {
-    "psr-4": {
-      "KaririCode\\Configurator\\": "src/"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "KaririCode\\Configurator\\Tests\\": "tests"
-    }
-  },
-  "require": {
-    "php": "^8.3",
-    "kariricode/contract": "^2.6",
-    "kariricode/data-structure": "^1.0",
-    "symfony/yaml": "^6.3"
-  },
-  "scripts": {
-    "test": "kcode test",
-    "check-style": "kcode cs:fix --check",
-    "fix-style": "kcode cs:fix",
-    "analyse": "kcode analyse"
-  },
-  "extra": {
-    "branch-alias": {
-      "dev-main": "1.0.x-dev"
+    "name": "kariricode/configurator",
+    "description": "Configuration management for KaririCode Framework — multi-format loading, environment interpolation, value processor chains, encrypted secrets, schema validation, hot reload, and ARFA 1.3 ecosystem integration with zero third-party dependencies",
+    "keywords": [
+        "configuration",
+        "config",
+        "settings",
+        "arfa",
+        "php84",
+        "kariricode",
+        "yaml",
+        "json",
+        "ini",
+        "toml",
+        "validation",
+        "immutable",
+        "environment",
+        "interpolation",
+        "encryption",
+        "hot-reload"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Walmir Silva",
+            "email": "walmir.silva@kariricode.org",
+            "homepage": "https://kariricode.org",
+            "role": "Developer"
+        }
+    ],
+    "homepage": "https://github.com/KaririCode-Framework/kariricode-configurator",
+    "support": {
+        "issues": "https://github.com/KaririCode-Framework/kariricode-configurator/issues",
+        "source": "https://github.com/KaririCode-Framework/kariricode-configurator",
+        "docs": "https://kariricode.org/docs/configurator"
     },
-    "kariricode/configurator": {
-      "config-file": "config/configurator.php"
-    }
-  },
-  "support": {
-    "issues": "https://github.com/KaririCode-Framework/kariricode-configurator/issues",
-    "source": "https://github.com/KaririCode-Framework/kariricode-configurator"
-  },
-  "config": {
-    "allow-plugins": {
-      "dealerdirect/phpcodesniffer-composer-installer": true
+    "require": {
+        "php": "^8.4",
+        "kariricode/contract": "^4.1"
     },
-    "sort-packages": true
-  },
-  "minimum-stability": "stable",
-  "prefer-stable": true
+    "require-dev": {
+        "kariricode/devkit": "^1.0"
+    },
+    "suggest": {
+        "ext-openssl": "Required to decrypt ENC(...) values (EncryptedValueProcessor, AES-256-GCM)",
+        "psr/simple-cache": "Required by CacheBridge (any PSR-16 implementation)",
+        "psr/event-dispatcher": "Required by EventDispatcherBridge and ReloadableConfiguration events (any PSR-14 dispatcher)",
+        "kariricode/cache": "PSR-16 implementation from the KaririCode ecosystem (for CacheBridge)",
+        "kariricode/event-dispatcher": "PSR-14 implementation from the KaririCode ecosystem (for lifecycle events)",
+        "kariricode/dotenv": "For .env file integration (DotenvBridge, withDotenv)",
+        "kariricode/processor-pipeline": "For running ConfigurationProcessor inside processing pipelines"
+    },
+    "autoload": {
+        "psr-4": {
+            "KaririCode\\Configurator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "KaririCode\\Configurator\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "preferred-install": "dist"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }

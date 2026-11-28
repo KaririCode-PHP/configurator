@@ -4,32 +4,1032 @@ declare(strict_types=1);
 
 namespace KaririCode\Configurator\Loader;
 
+use KaririCode\Configurator\Contract\Loader;
 use KaririCode\Configurator\Exception\ConfigurationException;
+use KaririCode\Configurator\Exception\LoaderException;
 
 /**
- * Loader for YAML configuration files.
+ * Loads configuration from YAML files using a built-in parser.
+ *
+ * Implements the subset of YAML 1.2 that configuration files use: block
+ * mappings and sequences (including sequences of mappings and sequences
+ * written at the parent key's indentation), flow collections on one or
+ * several lines, plain / single-quoted / double-quoted scalars with the
+ * YAML escape set, block scalars (| and >) with chomping (-, +) and
+ * indentation indicators, multi-line plain scalars, comments, and
+ * scalar type resolution (null, bool, int in four radixes, float).
+ *
+ * Parsing runs in two phases. The lexical phase consumes block scalars
+ * and multi-line flow collections from the raw text and rewrites each
+ * as a single-line equivalent before blank lines and comments are
+ * removed, so that their content can never be mistaken for structure.
+ * The structural phase then builds mappings and sequences from
+ * indentation and rejects any line it cannot place.
+ *
+ * Unsupported features fail loudly with ConfigurationException (code
+ * 1007) instead of being silently misparsed:
+ *   - Anchors (&name), aliases (*name), merge keys (<<:)
+ *   - Type tags (!!str, !!binary, ...)
+ *   - Tab indentation
+ *   - Quoted scalars spanning several lines
+ * Structurally invalid input fails with LoaderException (code 1102).
+ *
+ * Zero external dependencies — no Symfony/Yaml required (ADR-002).
+ *
+ * @package KaririCode\Configurator
+ * @since   4.0.0 ARFA 1.3
  */
-class YamlLoader extends FileLoader
+final readonly class YamlLoader implements Loader
 {
+    use Utf8Encoding;
+
+    /** Block scalar header: style, then chomping/indentation indicators in either order. */
+    private const string BLOCK_HEADER = '/^([|>])(?:([+-])([1-9])?|([1-9])([+-])?)?(?:[ \t]+#.*)?$/';
+
+    /** Byte that replaces quoted spans during position-preserving scans. */
+    private const string MASK = "\x00";
+
+    /** @var array<array-key, string> Single-character escapes (YAML 1.2, section 5.7); key "0" is stored as int */
+    private const array ESCAPES = [
+        '0' => "\0",
+        'a' => "\x07",
+        'b' => "\x08",
+        't' => "\t",
+        "\t" => "\t",
+        'n' => "\n",
+        'v' => "\x0B",
+        'f' => "\f",
+        'r' => "\r",
+        'e' => "\x1B",
+        ' ' => ' ',
+        '"' => '"',
+        '/' => '/',
+        '\\' => '\\',
+        'N' => "\u{85}",
+        '_' => "\u{A0}",
+        'L' => "\u{2028}",
+        'P' => "\u{2029}",
+    ];
+
     public function load(string $path): array
     {
-        $this->validateFile($path);
-
-        if (!extension_loaded('yaml')) {
-            throw new ConfigurationException('YAML extension is not loaded');
+        if (!is_file($path) || !is_readable($path)) {
+            throw LoaderException::fileNotFound($path);
         }
 
-        $config = yaml_parse_file($path);
+        $content = file_get_contents($path);
 
-        if (false === $config) {
-            throw new ConfigurationException("Failed to parse YAML file: {$path}");
+        if ($content === false) {
+            throw LoaderException::fileUnreadable($path);
         }
 
-        return $config;
+        try {
+            return $this->parse($content);
+        } catch (\UnexpectedValueException $exception) {
+            throw LoaderException::parseError($path, $exception->getMessage());
+        }
     }
 
-    public function getTypes(): array
+    public function supports(string $extension): bool
     {
-        return ['yml', 'yaml'];
+        return $extension === 'yaml' || $extension === 'yml';
+    }
+
+    // ── Lexical Phase ─────────────────────────────────────────────────
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private function parse(string $yaml): array
+    {
+        $lines = $this->normalizeLines($yaml);
+
+        if ($lines === []) {
+            return [];
+        }
+
+        return $this->parseBlock($lines, $this->indentLevel($lines[0]));
+    }
+
+    /**
+     * Returns the structural lines of the document.
+     *
+     * Block scalars and multi-line flow collections are consumed from the
+     * raw text first and rewritten as single-line equivalents; only then
+     * are blank lines, full-line comments, directives, and document
+     * markers dropped.
+     *
+     * @return list<string>
+     *
+     * @throws ConfigurationException    When an unsupported feature is found
+     * @throws \UnexpectedValueException When a flow collection is never closed
+     */
+    private function normalizeLines(string $yaml): array
+    {
+        if (str_starts_with($yaml, "\xEF\xBB\xBF")) {
+            $yaml = substr($yaml, 3);
+        }
+
+        $raw = explode("\n", str_replace(["\r\n", "\r"], "\n", $yaml));
+
+        // A final newline terminates the last line; it does not open one.
+        if (end($raw) === '') {
+            array_pop($raw);
+        }
+
+        $lines = [];
+        $count = count($raw);
+
+        for ($index = 0; $index < $count; ++$index) {
+            $line = rtrim($raw[$index]);
+            $stripped = ltrim($line);
+
+            if ($stripped === '' || $stripped[0] === '#' || $line[0] === '%' || $line === '---' || $line === '...') {
+                continue;
+            }
+
+            $this->detectUnsupportedFeatures($line, $index + 1);
+
+            $node = $this->splitNode($line);
+
+            if (preg_match(self::BLOCK_HEADER, $node['value'], $header) === 1) {
+                [$scalar, $index] = $this->consumeBlockScalar($raw, $index, $node['column'], $header);
+                $lines[] = $node['prefix'] . $this->quote($scalar);
+
+                continue;
+            }
+
+            if ($this->flowDepth($this->stripInlineComment($node['value'])) > 0) {
+                [$line, $index] = $this->consumeFlowCollection($raw, $index, $line);
+            }
+
+            if ($this->hasUnterminatedQuote($line)) {
+                throw ConfigurationException::unsupportedYamlFeature(
+                    'quoted scalars spanning several lines are not supported — use a block scalar (| or >)',
+                    $index + 1,
+                );
+            }
+
+            $lines[] = $line;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Detects YAML features outside the configuration subset.
+     *
+     * @throws ConfigurationException
+     */
+    private function detectUnsupportedFeatures(string $line, int $lineNumber): void
+    {
+        $stripped = ltrim($line);
+
+        if (
+            preg_match('/&\w+\s*$/', $stripped) === 1
+            || preg_match('/:\s+&\w+/', $stripped) === 1
+            || preg_match('/^-\s+&\w+/', $stripped) === 1
+        ) {
+            throw ConfigurationException::unsupportedYamlFeature('YAML anchors (&name) are not supported', $lineNumber);
+        }
+
+        // Checked before aliases: a merge line always contains an alias.
+        if (str_starts_with($stripped, '<<:') || str_starts_with($stripped, '<< :')) {
+            throw ConfigurationException::unsupportedYamlFeature('YAML merge keys (<<:) are not supported', $lineNumber);
+        }
+
+        if (
+            preg_match('/\*\w+/', $stripped) === 1
+            && !str_contains($stripped, '"')
+            && !str_contains($stripped, "'")
+            && (preg_match('/:\s+\*\w+/', $stripped) === 1 || preg_match('/^-\s+\*\w+/', $stripped) === 1)
+        ) {
+            throw ConfigurationException::unsupportedYamlFeature('YAML aliases (*name) are not supported', $lineNumber);
+        }
+
+        if (preg_match('/!!\w+/', $stripped) === 1) {
+            throw ConfigurationException::unsupportedYamlFeature('YAML type tags (!!type) are not supported', $lineNumber);
+        }
+
+        if ($line !== $stripped && str_contains(substr($line, 0, strlen($line) - strlen($stripped)), "\t")) {
+            throw ConfigurationException::unsupportedYamlFeature('Tab indentation is not allowed — use spaces only', $lineNumber);
+        }
+    }
+
+    /**
+     * Splits a line into the text that introduces its value (indentation,
+     * sequence dashes, "key:") and the value itself.
+     *
+     * @return array{prefix: string, value: string, column: int} where
+     *         column is the position of the node that owns the value
+     */
+    private function splitNode(string $line): array
+    {
+        $position = $this->indentLevel($line);
+        $column = $position;
+        $length = strlen($line);
+
+        while ($position < $length && $this->isSequenceItem(substr($line, $position))) {
+            $column = $position;
+            $position = $this->skipSpaces($line, $position + 1);
+        }
+
+        $rest = substr($line, $position);
+        $colon = $this->findKeyColon($rest);
+
+        if ($colon === false) {
+            return ['prefix' => substr($line, 0, $position), 'value' => $rest, 'column' => $column];
+        }
+
+        $valueStart = $this->skipSpaces($line, $position + $colon + 1);
+
+        return [
+            'prefix' => rtrim(substr($line, 0, $valueStart)) . ' ',
+            'value' => substr($line, $valueStart),
+            'column' => $position,
+        ];
+    }
+
+    /**
+     * Consumes the lines of a block scalar from the raw text and returns
+     * its value with folding and chomping applied (YAML 1.2, section 8.1).
+     *
+     * @param list<string>              $raw
+     * @param array<array-key, string>  $header BLOCK_HEADER match groups
+     *
+     * @return array{0: string, 1: int} the value and the index of its last raw line
+     */
+    private function consumeBlockScalar(array $raw, int $index, int $parentColumn, array $header): array
+    {
+        $style = $header[1];
+        $chomping = ($header[2] ?? '') !== '' ? $header[2] : ($header[5] ?? '');
+        $indicator = (int) (($header[3] ?? '') !== '' ? $header[3] : ($header[4] ?? '0'));
+
+        $contentIndent = $indicator > 0 ? $parentColumn + $indicator : null;
+        $content = [];
+        $last = $index;
+        $count = count($raw);
+
+        for ($i = $index + 1; $i < $count; ++$i) {
+            $line = $raw[$i];
+
+            if (trim($line) === '') {
+                $content[] = '';
+
+                continue;
+            }
+
+            $lineIndent = $this->indentLevel($line);
+            $contentIndent ??= $lineIndent;
+
+            if ($lineIndent <= $parentColumn || $lineIndent < $contentIndent) {
+                break;
+            }
+
+            $content[] = substr($line, $contentIndent);
+            $last = $i;
+        }
+
+        $trailing = 0;
+
+        while ($content !== [] && end($content) === '') {
+            array_pop($content);
+            ++$trailing;
+        }
+
+        $text = $style === '|' ? implode("\n", $content) : $this->foldLines($content);
+
+        $value = match ($chomping) {
+            '-' => $text,
+            '+' => $text . ($content === [] ? '' : "\n") . str_repeat("\n", $trailing),
+            default => $content === [] ? '' : $text . "\n",
+        };
+
+        return [$value, $last];
+    }
+
+    /**
+     * Folds block scalar lines: a single line break between two ordinary
+     * lines becomes a space; empty lines and more-indented lines keep
+     * their line breaks.
+     *
+     * @param list<string> $lines
+     */
+    private function foldLines(array $lines): string
+    {
+        $text = '';
+        $breaks = 0;
+        $first = true;
+        $previousMoreIndented = false;
+
+        foreach ($lines as $line) {
+            if ($line === '') {
+                ++$breaks;
+
+                continue;
+            }
+
+            $moreIndented = $line[0] === ' ' || $line[0] === "\t";
+
+            if ($first) {
+                $text = str_repeat("\n", $breaks) . $line;
+                $first = false;
+            } elseif ($moreIndented || $previousMoreIndented) {
+                $text .= str_repeat("\n", $breaks + 1) . $line;
+            } else {
+                $text .= ($breaks === 0 ? ' ' : str_repeat("\n", $breaks)) . $line;
+            }
+
+            $breaks = 0;
+            $previousMoreIndented = $moreIndented;
+        }
+
+        return $text;
+    }
+
+    /**
+     * Joins the continuation lines of a flow collection opened on
+     * $raw[$index] until its brackets balance.
+     *
+     * @param list<string> $raw
+     *
+     * @return array{0: string, 1: int} the joined line and the index of its last raw line
+     *
+     * @throws \UnexpectedValueException When the collection is never closed
+     */
+    private function consumeFlowCollection(array $raw, int $index, string $line): array
+    {
+        $joined = $this->stripInlineComment($line);
+        $count = count($raw);
+
+        while ($this->flowDepth($joined) > 0) {
+            if (++$index >= $count) {
+                throw new \UnexpectedValueException(sprintf("unterminated flow collection in '%s'", trim($line)));
+            }
+
+            $next = trim($raw[$index]);
+
+            if ($next !== '' && $next[0] !== '#') {
+                $joined .= ' ' . $this->stripInlineComment($next);
+            }
+        }
+
+        return [$joined, $index];
+    }
+
+    /**
+     * Encodes a string as a double-quoted scalar; the inverse of
+     * unescapeDoubleQuoted for every character it emits.
+     */
+    private function quote(string $value): string
+    {
+        return '"' . strtr($value, [
+            '\\' => '\\\\',
+            '"' => '\\"',
+            "\n" => '\\n',
+            "\r" => '\\r',
+            "\t" => '\\t',
+        ]) . '"';
+    }
+
+    // ── Structural Phase ──────────────────────────────────────────────
+
+    /**
+     * Parses lines that form one complete block as a mapping or a
+     * sequence, chosen by the first line.
+     *
+     * @param non-empty-list<string> $lines
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws \UnexpectedValueException When a line is indented less than the block
+     */
+    private function parseBlock(array $lines, int $indent): array
+    {
+        foreach ($lines as $line) {
+            if ($this->indentLevel($line) < $indent) {
+                throw new \UnexpectedValueException(sprintf("bad indentation at '%s'", trim($line)));
+            }
+        }
+
+        return $this->isSequenceItem(ltrim($lines[0]))
+            ? $this->parseSequence($lines, 0, count($lines), $indent)
+            : $this->parseMapping($lines, 0, count($lines), $indent);
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws \UnexpectedValueException When a line is not a key at this level
+     */
+    private function parseMapping(array $lines, int $start, int $end, int $indent): array
+    {
+        $result = [];
+        $index = $start;
+
+        while ($index < $end) {
+            $line = $lines[$index];
+            $stripped = ltrim($line);
+            $colon = $this->findKeyColon($stripped);
+
+            if ($colon === false || $this->indentLevel($line) !== $indent || $this->isSequenceItem($stripped)) {
+                throw new \UnexpectedValueException(sprintf("expected 'key: value', got '%s'", $stripped));
+            }
+
+            $key = $this->parseKey(substr($stripped, 0, $colon));
+            $value = $this->stripInlineComment(trim(substr($stripped, $colon + 1)));
+            ++$index;
+
+            if ($value === '') {
+                [$result[$key], $index] = $this->parseNestedValue($lines, $index, $end, $indent);
+
+                continue;
+            }
+
+            $continuationEnd = $this->findBlockEnd($lines, $index, $end, $indent + 1);
+            $result[$key] = $this->parseInlineValue($value, $this->slice($lines, $index, $continuationEnd));
+            $index = $continuationEnd;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Parses the value of a "key:" written with nothing inline: a nested
+     * block, a sequence written at the key's own indentation, or null.
+     *
+     * @param list<string> $lines
+     *
+     * @return array{0: mixed, 1: int} the value and the index after it
+     */
+    private function parseNestedValue(array $lines, int $index, int $end, int $keyIndent): array
+    {
+        if ($index >= $end) {
+            return [null, $index];
+        }
+
+        $childIndent = $this->indentLevel($lines[$index]);
+
+        if ($childIndent > $keyIndent) {
+            $blockEnd = $this->findBlockEnd($lines, $index, $end, $keyIndent + 1);
+            $block = $this->slice($lines, $index, $blockEnd);
+
+            return [$block === [] ? null : $this->parseBlock($block, $childIndent), $blockEnd];
+        }
+
+        if ($childIndent === $keyIndent && $this->isSequenceItem(ltrim($lines[$index]))) {
+            $blockEnd = $this->findSequenceEnd($lines, $index, $end, $keyIndent);
+
+            return [$this->parseSequence($lines, $index, $blockEnd, $keyIndent), $blockEnd];
+        }
+
+        return [null, $index];
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<mixed>
+     *
+     * @throws \UnexpectedValueException When a line is not an item at this level
+     */
+    private function parseSequence(array $lines, int $start, int $end, int $indent): array
+    {
+        $result = [];
+        $index = $start;
+
+        while ($index < $end) {
+            $line = $lines[$index];
+
+            if ($this->indentLevel($line) !== $indent || !$this->isSequenceItem(ltrim($line))) {
+                throw new \UnexpectedValueException(sprintf("expected a sequence item '- ', got '%s'", trim($line)));
+            }
+
+            $itemEnd = $this->findBlockEnd($lines, $index + 1, $end, $indent + 1);
+            $result[] = $this->parseSequenceItem($line, $this->slice($lines, $index + 1, $itemEnd));
+            $index = $itemEnd;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Parses one "- ..." item and its more-indented continuation lines.
+     *
+     * A mapping ("- key: value") or nested sequence ("- - x") that starts
+     * on the dash line is re-anchored at its own column and parsed
+     * together with its continuation.
+     *
+     * @param list<string> $continuation
+     */
+    private function parseSequenceItem(string $line, array $continuation): mixed
+    {
+        $contentColumn = $this->skipSpaces($line, $this->indentLevel($line) + 1);
+        $content = substr($line, $contentColumn);
+
+        if ($content === '') {
+            return $continuation === []
+                ? null
+                : $this->parseBlock($continuation, $this->indentLevel($continuation[0]));
+        }
+
+        if ($this->isSequenceItem($content) || $this->findKeyColon($content) !== false) {
+            return $this->parseBlock([str_repeat(' ', $contentColumn) . $content, ...$continuation], $contentColumn);
+        }
+
+        return $this->parseInlineValue($content, $continuation);
+    }
+
+    /**
+     * @param list<string> $continuation more-indented lines after the value
+     *
+     * @throws \UnexpectedValueException When a flow or quoted value has continuation lines
+     */
+    private function parseInlineValue(string $value, array $continuation = []): mixed
+    {
+        $value = $this->stripInlineComment($value);
+        $first = $value[0] ?? '';
+
+        if ($first === '[' || $first === '{' || $first === '"' || $first === "'") {
+            if ($continuation !== []) {
+                throw new \UnexpectedValueException(sprintf("unexpected '%s' after '%s'", trim($continuation[0]), $value));
+            }
+
+            return match ($first) {
+                '[' => $this->parseFlowSequence($value),
+                '{' => $this->parseFlowMapping($value),
+                default => $this->parseScalar($value),
+            };
+        }
+
+        if ($continuation === []) {
+            return $this->parseScalar($value);
+        }
+
+        $parts = [$value];
+
+        foreach ($continuation as $line) {
+            $part = $this->stripInlineComment(trim($line));
+
+            if ($this->isSequenceItem($part) || $this->findKeyColon($part) !== false) {
+                throw new \UnexpectedValueException(sprintf("unexpected '%s' inside a multi-line plain scalar", $part));
+            }
+
+            $parts[] = $part;
+        }
+
+        return $this->parseScalar(implode(' ', $parts));
+    }
+
+    // ── Scalar Parsing ────────────────────────────────────────────────
+
+    private function parseScalar(string $value): string|int|float|bool|null
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (
+            (str_starts_with($value, '"') && str_ends_with($value, '"'))
+            || (str_starts_with($value, "'") && str_ends_with($value, "'"))
+        ) {
+            return $this->unquote($value);
+        }
+
+        $lower = strtolower($value);
+
+        if ($value === '~' || $lower === 'null') {
+            return null;
+        }
+
+        if ($lower === 'true' || $lower === 'yes' || $lower === 'on') {
+            return true;
+        }
+
+        if ($lower === 'false' || $lower === 'no' || $lower === 'off') {
+            return false;
+        }
+
+        // intval(.., 0) does not recognize 0b/0o prefixes, so each radix is
+        // handled explicitly. YAML 1.2 treats a leading zero as decimal.
+        if (preg_match('/^(-?)0b([01]+)$/i', $value, $matches) === 1) {
+            $magnitude = intval($matches[2], 2);
+
+            return $matches[1] === '-' ? -$magnitude : $magnitude;
+        }
+
+        if (preg_match('/^(-?)0o([0-7]+)$/i', $value, $matches) === 1) {
+            $magnitude = intval($matches[2], 8);
+
+            return $matches[1] === '-' ? -$magnitude : $magnitude;
+        }
+
+        if (preg_match('/^-?0x[0-9a-fA-F]+$/', $value) === 1) {
+            return intval($value, 16);
+        }
+
+        if (preg_match('/^-?[0-9]+$/', $value) === 1) {
+            return (int) $value;
+        }
+
+        if (preg_match('/^-?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?$/', $value) === 1) {
+            return (float) $value;
+        }
+
+        return match ($lower) {
+            '.inf', '+.inf' => INF,
+            '-.inf' => -INF,
+            '.nan' => NAN,
+            default => $value,
+        };
+    }
+
+    private function parseKey(string $key): string
+    {
+        return $this->unquote(trim($key));
+    }
+
+    private function unquote(string $value): string
+    {
+        $value = trim($value);
+
+        if (strlen($value) >= 2) {
+            if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
+                return $this->unescapeDoubleQuoted(substr($value, 1, -1));
+            }
+
+            if (str_starts_with($value, "'") && str_ends_with($value, "'")) {
+                return str_replace("''", "'", substr($value, 1, -1));
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Decodes the escape sequences of a double-quoted scalar
+     * (YAML 1.2, section 5.7), including \xHH, \uHHHH and \UHHHHHHHH.
+     *
+     * @throws \UnexpectedValueException On an unknown or truncated escape
+     */
+    private function unescapeDoubleQuoted(string $value): string
+    {
+        $result = '';
+        $length = strlen($value);
+
+        for ($i = 0; $i < $length; ++$i) {
+            if ($value[$i] !== '\\') {
+                $result .= $value[$i];
+
+                continue;
+            }
+
+            $escape = $value[++$i] ?? '';
+
+            if (isset(self::ESCAPES[$escape])) {
+                $result .= self::ESCAPES[$escape];
+
+                continue;
+            }
+
+            $width = match ($escape) {
+                'x' => 2,
+                'u' => 4,
+                'U' => 8,
+                default => throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s'", $escape)),
+            };
+
+            $hex = substr($value, $i + 1, $width);
+
+            if (preg_match('/^[0-9a-fA-F]{' . $width . '}$/', $hex) !== 1) {
+                throw new \UnexpectedValueException(sprintf("invalid escape sequence '\\%s%s'", $escape, $hex));
+            }
+
+            $result .= $this->encodeCodePoint((int) hexdec($hex));
+            $i += $width;
+        }
+
+        return $result;
+    }
+
+    // ── Flow Collections ──────────────────────────────────────────────
+
+    /**
+     * @return list<mixed>
+     */
+    private function parseFlowSequence(string $value): array
+    {
+        $this->assertFlowClosesAtEnd($value);
+
+        return array_map(
+            fn (string $item): mixed => $this->parseInlineValue($item),
+            $this->splitFlowItems(substr($value, 1, -1)),
+        );
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private function parseFlowMapping(string $value): array
+    {
+        $this->assertFlowClosesAtEnd($value);
+        $result = [];
+
+        foreach ($this->splitFlowItems(substr($value, 1, -1)) as $item) {
+            $colon = $this->findKeyColon($item);
+
+            if ($colon === false) {
+                $result[$this->parseKey($item)] = null;
+
+                continue;
+            }
+
+            $result[$this->parseKey(substr($item, 0, $colon))] = $this->parseInlineValue(trim(substr($item, $colon + 1)));
+        }
+
+        return $result;
+    }
+
+    /**
+     * @throws \UnexpectedValueException When text follows the closing bracket
+     */
+    private function assertFlowClosesAtEnd(string $value): void
+    {
+        $masked = $this->maskQuoted($value);
+        $depth = 0;
+        $last = strlen($masked) - 1;
+
+        for ($i = 0; $i <= $last; ++$i) {
+            $depth += match ($masked[$i]) {
+                '[', '{' => 1,
+                ']', '}' => -1,
+                default => 0,
+            };
+
+            if ($depth === 0 && $i < $last) {
+                throw new \UnexpectedValueException(sprintf("unexpected text after flow collection in '%s'", $value));
+            }
+        }
+
+        if ($depth !== 0) {
+            throw new \UnexpectedValueException(sprintf("unbalanced flow collection '%s'", $value));
+        }
+    }
+
+    /**
+     * Splits flow collection content on top-level commas, ignoring commas
+     * inside quotes and nested collections. Empty items are dropped.
+     *
+     * @return list<string>
+     */
+    private function splitFlowItems(string $input): array
+    {
+        $masked = $this->maskQuoted($input);
+        $items = [];
+        $depth = 0;
+        $start = 0;
+        $length = strlen($masked);
+
+        for ($i = 0; $i <= $length; ++$i) {
+            $char = $masked[$i] ?? ',';
+
+            if ($char === '[' || $char === '{') {
+                ++$depth;
+            } elseif ($char === ']' || $char === '}') {
+                --$depth;
+            } elseif ($char === ',' && $depth === 0) {
+                $item = trim(substr($input, $start, $i - $start));
+
+                if ($item !== '') {
+                    $items[] = $item;
+                }
+
+                $start = $i + 1;
+            }
+        }
+
+        return $items;
+    }
+
+    // ── Utility ───────────────────────────────────────────────────────
+
+    /**
+     * Replaces every quoted span (delimiters included) with MASK bytes,
+     * preserving positions, so structural scans ignore quoted content.
+     *
+     * A quote opens a scalar only where YAML allows one to start: at the
+     * beginning, after a flow indicator, or after ": ", "- ", "? ". An
+     * apostrophe inside plain text (it's) is literal.
+     */
+    private function maskQuoted(string $text): string
+    {
+        $masked = $text;
+        $length = strlen($text);
+        $canOpen = true;
+
+        for ($i = 0; $i < $length; ++$i) {
+            $char = $text[$i];
+
+            if (($char === '"' || $char === "'") && $canOpen) {
+                $close = $this->closingQuote($text, $i);
+                $last = $close === -1 ? $length - 1 : $close;
+                $masked = substr_replace($masked, str_repeat(self::MASK, $last - $i + 1), $i, $last - $i + 1);
+                $i = $last;
+                $canOpen = false;
+
+                continue;
+            }
+
+            if ($char === ' ' || $char === "\t") {
+                continue;
+            }
+
+            $next = $text[$i + 1] ?? ' ';
+            $canOpen = str_contains('[{,', $char)
+                || (str_contains(':-?', $char) && ($next === ' ' || $next === "\t" || $next === '"' || $next === "'"));
+        }
+
+        return $masked;
+    }
+
+    /**
+     * Position of the quote that closes the scalar opened at $open, or -1.
+     * Double quotes honour backslash escapes; single quotes use ''.
+     */
+    private function closingQuote(string $text, int $open): int
+    {
+        $quote = $text[$open];
+        $length = strlen($text);
+
+        for ($i = $open + 1; $i < $length; ++$i) {
+            if ($quote === '"' && $text[$i] === '\\') {
+                ++$i;
+
+                continue;
+            }
+
+            if ($text[$i] !== $quote) {
+                continue;
+            }
+
+            if ($quote === "'" && ($text[$i + 1] ?? '') === "'") {
+                ++$i;
+
+                continue;
+            }
+
+            return $i;
+        }
+
+        return -1;
+    }
+
+    private function hasUnterminatedQuote(string $line): bool
+    {
+        $masked = $this->maskQuoted($line);
+        $length = strlen($line);
+
+        for ($i = 0; $i < $length; ++$i) {
+            $char = $line[$i];
+
+            if (($char === '"' || $char === "'") && $masked[$i] === self::MASK && ($i === 0 || $masked[$i - 1] !== self::MASK)) {
+                if ($this->closingQuote($line, $i) === -1) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Finds the colon that separates a key from its value: outside quotes
+     * and flow collections, and followed by whitespace or end of text (or
+     * directly after a quoted key, JSON-style).
+     */
+    private function findKeyColon(string $text): int|false
+    {
+        $masked = $this->maskQuoted($text);
+        $length = strlen($masked);
+        $depth = 0;
+
+        for ($i = 0; $i < $length; ++$i) {
+            $char = $masked[$i];
+
+            if ($char === '[' || $char === '{') {
+                ++$depth;
+            } elseif ($char === ']' || $char === '}') {
+                --$depth;
+            } elseif ($char === '#' && ($i === 0 || $masked[$i - 1] === ' ' || $masked[$i - 1] === "\t")) {
+                return false;
+            } elseif ($char === ':' && $depth === 0) {
+                $next = $masked[$i + 1] ?? ' ';
+
+                if ($next === ' ' || $next === "\t" || ($i > 0 && $masked[$i - 1] === self::MASK)) {
+                    return $i;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Removes a trailing "# comment" — a '#' at the start of the text or
+     * preceded by whitespace, outside quotes.
+     */
+    private function stripInlineComment(string $value): string
+    {
+        $masked = $this->maskQuoted($value);
+        $length = strlen($masked);
+
+        for ($i = 0; $i < $length; ++$i) {
+            if ($masked[$i] === '#' && ($i === 0 || $masked[$i - 1] === ' ' || $masked[$i - 1] === "\t")) {
+                return rtrim(substr($value, 0, $i));
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Net count of open flow brackets outside quotes.
+     */
+    private function flowDepth(string $text): int
+    {
+        $masked = $this->maskQuoted($text);
+
+        return substr_count($masked, '[') + substr_count($masked, '{')
+            - substr_count($masked, ']') - substr_count($masked, '}');
+    }
+
+    private function isSequenceItem(string $stripped): bool
+    {
+        return $stripped === '-' || str_starts_with($stripped, '- ') || str_starts_with($stripped, "-\t");
+    }
+
+    private function indentLevel(string $line): int
+    {
+        return strlen($line) - strlen(ltrim($line, ' '));
+    }
+
+    private function skipSpaces(string $text, int $from): int
+    {
+        $length = strlen($text);
+
+        while ($from < $length && ($text[$from] === ' ' || $text[$from] === "\t")) {
+            ++$from;
+        }
+
+        return $from;
+    }
+
+    /**
+     * Index of the first line in [$from, $end) indented less than $minIndent.
+     *
+     * @param list<string> $lines
+     */
+    private function findBlockEnd(array $lines, int $from, int $end, int $minIndent): int
+    {
+        for ($i = $from; $i < $end; ++$i) {
+            if ($this->indentLevel($lines[$i]) < $minIndent) {
+                return $i;
+            }
+        }
+
+        return $end;
+    }
+
+    /**
+     * End of a sequence written at its key's indentation: the first line
+     * that is less indented, or equally indented but not an item.
+     *
+     * @param list<string> $lines
+     */
+    private function findSequenceEnd(array $lines, int $from, int $end, int $indent): int
+    {
+        for ($i = $from; $i < $end; ++$i) {
+            $lineIndent = $this->indentLevel($lines[$i]);
+
+            if ($lineIndent < $indent || ($lineIndent === $indent && !$this->isSequenceItem(ltrim($lines[$i])))) {
+                return $i;
+            }
+        }
+
+        return $end;
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<string>
+     */
+    private function slice(array $lines, int $from, int $to): array
+    {
+        return array_slice($lines, $from, $to - $from);
     }
 }
