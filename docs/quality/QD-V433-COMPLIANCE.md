@@ -1,14 +1,16 @@
 # QD-V433-COMPLIANCE: kariricode/configurator 4.2.0
 
-- **Status: PENDING** (automated gates measured locally; CI run pending)
+- **Status: PASS** (automated gates)
 - **Date:** 2026-11-28
 - **Component:** kariricode/configurator 4.2.0; kariricode/contract ^2.11 (2.12.1 locked); kariricode/exception ^2.0.2 (2.0.2 locked)
 - **Standards:** KaririCode Spec V4.3.3 §29 (gates) and §32 (supply chain); ARFA 1.3 level 1 (Structural); OWASP ASVS 5.0 level 2
 - **Authors:** Walmir Silva <walmir.silva@kariricode.org>
 
-Every automated gate of §29.1 passes locally (§1). The status turns PASS
-when CI confirms the gates on PHP 8.4 and the suites on PHP 8.5 with the
-lowest dependencies, and FAIL if a gate fails. PASS covers the automated
+Every automated gate of §29.1 passes, locally (§1) and in CI: run
+[46133971919](https://github.com/KaririCode-PHP/configurator/actions/runs/46133971919)
+passed the gates on PHP 8.4.28 and the suites on PHP 8.5.13 with the lowest
+dependencies (kariricode/contract 2.11.0, kariricode/exception 2.0.2), at
+`1596a38`. The status turns FAIL if a gate fails. PASS covers the automated
 gates (G1, G4, G5, G6); G3 needs a second reviewer (§8). No score is
 assigned (E-006). This is the first quality record of the package: the
 4.2 tarball measured itself with a harness kept outside the package
@@ -17,7 +19,8 @@ assigned (E-006). This is the first quality record of the package: the
 
 ## 1. Gates (Spec V4.3.3 §29.1)
 
-Measured locally on 2026-11-28 (§2).
+Measured locally on 2026-11-28 (§2). CI reported the same tests (594,
+4,023 assertions) and the same mutation run (2,094 mutants, 72 escaped).
 
 | Gate | Command | Budget | Measured | Result |
 |---|---|---|---|---|
