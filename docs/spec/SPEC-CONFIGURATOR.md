@@ -96,8 +96,17 @@ seal() pipeline:
   raw data → ValueProcessors → Validation → freeze
 ```
 
-After seal(), load() and merge() throw ConfigurationException.
+After seal(), load() and merge() throw AccessException (CFG_2801).
 ConfigurationBuilder.build() calls seal() automatically.
+
+ConfigurationBuilder loads its sources in priority order: provider
+defaults, directory files, explicit files, overrides. In a directory,
+base files have no dot before the extension (`app.php`) and load first,
+sorted by name; files named `<name>.<environment>.<ext>`
+(`app.production.php`) are overlays and load after them only when
+withEnvironment() selected that environment. Without an environment, or
+with another one, overlays do not load. A glob pattern given to
+withDirectory() loads every file it matches, in name order.
 
 ## 6. Value Processor Chain
 
@@ -123,7 +132,7 @@ ENC(base64...)       → EncryptedValueProcessor → "plaintext_secret"
 | Prefix   | Output type | Example                          |
 |----------|-------------|----------------------------------|
 | `int:`   | int         | `int:8080` → 8080                |
-| `float:` | float       | `float:3.14` → 3.14             |
+| `float:` | float       | `float:3.14` → 3.14              |
 | `bool:`  | bool        | `bool:true` → true               |
 | `json:`  | array/mixed | `json:{"a":1}` → ['a' => 1]     |
 | `csv:`   | array       | `csv:a,b,c` → ['a','b','c']     |
@@ -132,6 +141,12 @@ ENC(base64...)       → EncryptedValueProcessor → "plaintext_secret"
 | `trim:`  | string      | `trim:  hello  ` → 'hello'       |
 | `lower:` | string      | `lower:HELLO` → 'hello'          |
 | `upper:` | string      | `upper:hello` → 'HELLO'          |
+
+`int:` takes a decimal integer within the 64-bit range and `float:` a
+decimal number (`1e3` included); any other payload, and a `bool:` outside
+true, false, 1, 0, yes, no, on, off, raises ProcessorException
+(CFG_2831) instead of converting to 0 or false. A failed cast names the
+type and the cause, never the payload.
 
 Custom casters: `$processor->registerCaster('hex', fn($v) => hexdec($v))`
 
@@ -245,9 +260,14 @@ LoaderException CFG_2820 through a scoped error handler (no `@`).
 ## 10. Hot Reload
 
 `ReloadableConfiguration` decorator monitors config files via
-filemtime() polling. Configurable interval (default 5s). Atomic
-rebuild ensures readers see consistent state. Emits ConfigReloaded
-event for cache invalidation and observability.
+filemtime() polling, at most once per interval (default 5 s), from
+checkAndReload() or from any read. The new configuration is built
+completely before the swap, so readers see the old or the new one.
+A successful rebuild dispatches ConfigReloaded; a failed one keeps the
+last good configuration, records the file times (the same broken files
+are not rebuilt until they change) and dispatches ConfigReloadFailed.
+Reads never fail because of a reload; checkAndReload() and
+forceReload() rethrow the failure (ADR-012).
 
 ## 11. ARFA 1.3 Compliance
 

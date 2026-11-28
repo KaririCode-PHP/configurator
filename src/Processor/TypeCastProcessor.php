@@ -104,9 +104,21 @@ final class TypeCastProcessor implements ValueProcessor
     private function defaultCasters(): array
     {
         return [
-            'int' => static fn(string $v): int => (int) $v,
+            'int' => static function (string $v): int {
+                $integer = filter_var(value: $v, filter: FILTER_VALIDATE_INT);
 
-            'float' => static fn(string $v): float => (float) $v,
+                return $integer === false
+                    ? throw ProcessorException::typeCastFailed(type: 'int', reason: 'not a decimal integer within the 64-bit range')
+                    : $integer;
+            },
+
+            'float' => static function (string $v): float {
+                $float = filter_var(value: $v, filter: FILTER_VALIDATE_FLOAT);
+
+                return $float === false
+                    ? throw ProcessorException::typeCastFailed(type: 'float', reason: 'not a decimal number')
+                    : $float;
+            },
 
             'bool' => static fn(string $v): bool => match (strtolower($v)) {
                 'true', '1', 'yes', 'on' => true,

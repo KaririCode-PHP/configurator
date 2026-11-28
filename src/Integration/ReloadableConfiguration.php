@@ -8,6 +8,7 @@ use KaririCode\Configurator\Configuration;
 use KaririCode\Configurator\ConfigurationBuilder;
 use KaririCode\Configurator\Contract\Configurator;
 use KaririCode\Configurator\Event\ConfigReloaded;
+use KaririCode\Configurator\Event\ConfigReloadFailed;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -18,8 +19,10 @@ use Psr\EventDispatcher\EventDispatcherInterface;
  * It polls filemtime() (portable across Linux, macOS and containers,
  * unlike inotify) at most once per interval, from checkAndReload() or
  * from any read. A reload builds the new configuration completely before
- * swapping it in, so a read sees the old or the new one, never a mix; a
- * build that fails leaves the old configuration in place.
+ * swapping it in, so a read sees the old or the new one, never a mix. A
+ * rebuild that fails keeps the last good configuration and dispatches
+ * ConfigReloadFailed: a read never fails because a file is broken, while
+ * checkAndReload() and forceReload() rethrow (ADR-012).
  *
  * Preconditions: the builder builds a sealed configuration every time;
  * the watched files are the ones the builder reads.
@@ -28,15 +31,15 @@ use Psr\EventDispatcher\EventDispatcherInterface;
  * configuration between two reads.
  *
  * Side effects: a read may stat the watched files, rebuild the
- * configuration and dispatch ConfigReloaded.
+ * configuration and dispatch ConfigReloaded or ConfigReloadFailed.
  *
  * Example:
  *
  *     $config = new ReloadableConfiguration($files, $builder, checkIntervalSec: 2.0, dispatcher: $dispatcher);
  *     $timeout = $config->getInt('http.timeout'); // reloads first when a file changed
  *
- * References: ADR-006. ARFA 1.3 P3: adaptive configuration for
- * long-running workers; P5: ConfigReloaded.
+ * References: ADR-006, ADR-012. ARFA 1.3 P3: adaptive configuration for
+ * long-running workers; P5: ConfigReloaded and ConfigReloadFailed.
  *
  * @since 4.2.0
  */
@@ -68,10 +71,15 @@ final class ReloadableConfiguration implements Configurator
     // ── Hot Reload ───────────────────────────────────────────────────────
 
     /**
-     * Checks for file changes and reloads if needed.
+     * Rebuilds the configuration when a watched file changed since the
+     * last check, at most once per interval; true when it reloaded.
      *
-     * Call this from your event loop tick, middleware, or timer.
-     * Returns true if a reload occurred.
+     * Call it from an event-loop tick, a middleware or a timer to see
+     * failures: a rebuild that fails keeps the current configuration,
+     * dispatches ConfigReloadFailed and rethrows here, while a read that
+     * triggers the same check keeps serving the current configuration.
+     *
+     * @throws \Throwable What the builder threw, when the rebuild fails
      */
     public function checkAndReload(): bool
     {
@@ -94,7 +102,10 @@ final class ReloadableConfiguration implements Configurator
     }
 
     /**
-     * Forces an immediate reload regardless of the check interval.
+     * Rebuilds the configuration now, whatever the interval and the file
+     * times say; a failure keeps the current configuration and rethrows.
+     *
+     * @throws \Throwable What the builder threw, when the rebuild fails
      */
     public function forceReload(): void
     {
@@ -106,7 +117,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function get(string $path, mixed $default = null): mixed
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->get($path, $default);
     }
@@ -114,7 +125,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function getString(string $path, string $default = ''): string
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->getString($path, $default);
     }
@@ -122,7 +133,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function getInt(string $path, int $default = 0): int
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->getInt($path, $default);
     }
@@ -130,7 +141,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function getFloat(string $path, float $default = 0.0): float
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->getFloat($path, $default);
     }
@@ -138,7 +149,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function getBool(string $path, bool $default = false): bool
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->getBool($path, $default);
     }
@@ -146,7 +157,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function getArray(string $path, array $default = []): array
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->getArray($path, $default);
     }
@@ -154,7 +165,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function has(string $path): bool
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->has($path);
     }
@@ -162,7 +173,7 @@ final class ReloadableConfiguration implements Configurator
     #[\Override]
     public function all(): array
     {
-        $this->checkAndReload();
+        $this->refresh();
 
         return $this->inner->all();
     }
@@ -170,20 +181,47 @@ final class ReloadableConfiguration implements Configurator
     // ── Internal ─────────────────────────────────────────────────────────
 
     /**
+     * The check a read runs: a failed rebuild was dispatched as
+     * ConfigReloadFailed and the current configuration stays, so the
+     * read never fails because a file is broken.
+     */
+    private function refresh(): void
+    {
+        try {
+            $this->checkAndReload();
+        } catch (\Throwable) {
+            // Reported through ConfigReloadFailed; the last good configuration serves the read.
+        }
+    }
+
+    /**
+     * Builds the new configuration completely before swapping it in, so a
+     * read sees the old or the new one, never a mix. The file times are
+     * recorded either way: a broken file is not rebuilt again until it
+     * changes.
+     *
      * @param list<string> $changedFiles
+     *
+     * @throws \Throwable What the builder threw
      */
     private function reload(array $changedFiles): void
     {
         $startTime = hrtime(true);
 
-        // Atomic rebuild — new instance built completely before swap
-        $this->inner = $this->builder->build();
+        try {
+            $configuration = $this->builder->build();
+        } catch (\Throwable $exception) {
+            $this->captureFileMtimes();
+            $this->dispatcher?->dispatch(new ConfigReloadFailed($changedFiles, $exception));
+
+            throw $exception;
+        }
+
+        $this->inner = $configuration;
         $this->captureFileMtimes();
 
-        $elapsedMs = (hrtime(true) - $startTime) / 1_000_000;
-
         $this->dispatcher?->dispatch(
-            new ConfigReloaded($changedFiles, $elapsedMs),
+            new ConfigReloaded($changedFiles, (hrtime(true) - $startTime) / 1_000_000),
         );
     }
 

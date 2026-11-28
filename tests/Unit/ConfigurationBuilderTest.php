@@ -54,6 +54,37 @@ final class ConfigurationBuilderTest extends TestCase
         self::assertSame('db.prod.example.com', $config->get('database.host'));
     }
 
+    public function testOverlaysDoNotLoadWithoutAnEnvironment(): void
+    {
+        $config = ConfigurationBuilder::create()
+            ->withDirectory($this->fixturesPath)
+            ->build();
+
+        self::assertTrue($config->get('app.debug'));
+        self::assertSame('localhost', $config->get('database.host'));
+    }
+
+    public function testOverlaysOfAnotherEnvironmentDoNotLoad(): void
+    {
+        $config = ConfigurationBuilder::create()
+            ->withDirectory($this->fixturesPath)
+            ->withEnvironment('staging')
+            ->build();
+
+        self::assertTrue($config->get('app.debug'));
+        self::assertSame('file', $config->get('cache.driver'));
+    }
+
+    public function testAGlobPatternLoadsEveryFileItMatches(): void
+    {
+        $config = ConfigurationBuilder::create()
+            ->withDirectory($this->fixturesPath . '/app*.php')
+            ->build();
+
+        self::assertFalse($config->get('app.debug'), 'app.production.php sorts after app.php');
+        self::assertNull($config->get('services'));
+    }
+
     public function testAppliesOverrides(): void
     {
         $config = ConfigurationBuilder::create()

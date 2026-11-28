@@ -52,6 +52,33 @@ final class TypeCastProcessorTest extends TestCase
         self::assertSame(8080, $this->processor->process('int:8080'));
         self::assertSame(0, $this->processor->process('int:0'));
         self::assertSame(-1, $this->processor->process('int:-1'));
+        self::assertSame(42, $this->processor->process('int:+42'));
+        self::assertSame(PHP_INT_MAX, $this->processor->process('int:' . PHP_INT_MAX));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidNumbers(): iterable
+    {
+        yield 'int of text' => ['int:abc'];
+        yield 'int of nothing' => ['int:'];
+        yield 'int with trailing text' => ['int:8080x'];
+        yield 'int of a fraction' => ['int:1.5'];
+        yield 'int beyond 64 bits' => ['int:9223372036854775808'];
+        yield 'float of text' => ['float:abc'];
+        yield 'float of nothing' => ['float:'];
+        yield 'float with a comma' => ['float:1,5'];
+    }
+
+    /** Spec V4.3.3 §8.3: a cast that does not apply fails instead of becoming 0. */
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidNumbers')]
+    public function testNumericCastsRejectWhatIsNotANumber(string $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionCode(2831);
+
+        $this->processor->process($value);
     }
 
     // ── float ────────────────────────────────────────────────────────────
@@ -60,6 +87,8 @@ final class TypeCastProcessorTest extends TestCase
     {
         self::assertSame(3.14, $this->processor->process('float:3.14'));
         self::assertSame(0.0, $this->processor->process('float:0'));
+        self::assertSame(1000.0, $this->processor->process('float:1e3'));
+        self::assertSame(-0.5, $this->processor->process('float:-0.5'));
     }
 
     // ── bool ─────────────────────────────────────────────────────────────

@@ -235,10 +235,14 @@ final class ConfigurationBuilder
     }
 
     /**
-     * Scans a directory for configuration files.
+     * Loads the configuration files of a directory, sorted by name: the
+     * base files (`app.php`, no dot before the extension), then the
+     * overlays of the selected environment (`app.production.php`). Files
+     * of every supported extension count (php, json, yaml, yml, ini,
+     * toml); a missing directory loads nothing.
      *
-     * Supports glob patterns (e.g. '/config/*.php').
-     * Non-glob paths scan for *.php, *.json, *.yaml, *.yml.
+     * A glob pattern (`/config/*.php`) loads every file it matches, in
+     * name order, overlays included.
      */
     public function withDirectory(string $path): self
     {
@@ -248,12 +252,14 @@ final class ConfigurationBuilder
     }
 
     /**
-     * Sets the deployment environment for cascade loading.
+     * Selects the environment whose overlays load after the base files of
+     * each directory; with 'production':
      *
-     * When set, the builder loads base files first, then overlays
-     * environment-specific files. Example with environment 'production':
-     *   1. config/database.php       (base)
+     *   1. config/database.php             (base)
      *   2. config/database.production.php  (overlay)
+     *
+     * Without an environment, and for any other one, overlays such as
+     * `database.production.php` do not load.
      */
     public function withEnvironment(string $environment): self
     {
@@ -371,8 +377,10 @@ final class ConfigurationBuilder
     }
 
     /**
-     * The configuration files of a directory: base files, and the files of
-     * the selected environment (`app.production.php`), which load after.
+     * The configuration files of a directory: base files, whose names have
+     * no dot before the extension (`app.php`), and the overlays of the
+     * selected environment (`app.production.php`), which load after them.
+     * The overlays of other environments never load.
      *
      * @return array{list<string>, list<string>}
      */
@@ -385,10 +393,10 @@ final class ConfigurationBuilder
             foreach ($this->globFiles("{$directory}/*.{$extension}") as $file) {
                 $basename = pathinfo($file, PATHINFO_FILENAME);
 
-                if ($this->environment !== null && str_ends_with($basename, ".{$this->environment}")) {
-                    $envFiles[] = $file;
-                } else {
+                if (!str_contains($basename, '.')) {
                     $baseFiles[] = $file;
+                } elseif ($this->environment !== null && str_ends_with($basename, ".{$this->environment}")) {
+                    $envFiles[] = $file;
                 }
             }
         }

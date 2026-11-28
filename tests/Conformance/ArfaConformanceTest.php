@@ -126,7 +126,7 @@ final class ArfaConformanceTest extends TestCase
             self::assertTrue($type->isFinal() && $type->isReadOnly(), $relative);
         }
 
-        self::assertSame(4, $checked);
+        self::assertSame(5, $checked);
     }
 
     #[Test]
